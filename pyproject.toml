@@ -7,7 +7,9 @@ authors = [
     { name = "Silazemli", email = "you@example.com" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "openai>=3.14.1",
+]
 
 [project.scripts]
 mockingbird = "mockingbird:main"
