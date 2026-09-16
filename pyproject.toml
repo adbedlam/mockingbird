@@ -25,6 +25,20 @@ dev = [
     "black>=26.5.1",
     "isort>=9.0.1",
     "mypy>=2.3.1",
+    "pre-commit>=4.3.0",
     "pytest>=9.1.1",
     "ruff>=0.16.7",
 ]
+
+[tool.black]
+target-version = ["py313"]
+
+[tool.isort]
+profile = "black"
+src_paths = ["src"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["src"]
+pretty = true
+show_error_codes = true
