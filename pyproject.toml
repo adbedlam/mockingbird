@@ -1,7 +1,7 @@
 [project]
 name = "mockingbird"
 version = "0.1.0"
-description = "Add your description here"
+description = "A persistent digital agent that simulates a person's communication style, memory, and autonomous behavior."
 readme = "README.md"
 authors = [
     { name = "Silazemli", email = "you@example.com" }
