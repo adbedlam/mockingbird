@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from .message import Message
+from src.mockingbird.datacls import Message
+
 
 class Processor(ABC):
     @abstractmethod
