@@ -12,3 +12,7 @@ format:
 
 dev:
 	uv sync
+	uv run pre-commit install
+
+hooks:
+	uv run pre-commit install
