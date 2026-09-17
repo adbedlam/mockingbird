@@ -21,6 +21,5 @@ repos:
       - id: mypy
         name: mypy
         args: ["--config-file=pyproject.toml"]
-        additional_dependencies: []
         pass_filenames: false
         files: ^src/

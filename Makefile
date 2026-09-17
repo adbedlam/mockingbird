@@ -1,18 +1,20 @@
 install:
-	uv sync
+	uv sync --group dev
 
 test:
 	uv run pytest
 
 lint:
-	uv run ruff check .
+	uv run black --check --diff .
+	uv run isort --check-only --diff .
+	uv run mypy .
 
 format:
-	uv run ruff format .
-
-dev:
-	uv sync
-	uv run pre-commit install
+	uv run black .
+	uv run isort .
 
 hooks:
 	uv run pre-commit install
+
+dev:
+	install hooks
