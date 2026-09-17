@@ -1,4 +1,7 @@
+from typing import cast
+
 from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageParam
 
 
 class Qwen:
@@ -11,7 +14,9 @@ class Qwen:
 
     def generate(self, messages: list[dict[str, str]], *args, **kwargs):
         response = self.client.chat.completions.create(
-            model=self.model, messages=messages, **kwargs
+            model=self.model,
+            messages=cast(list[ChatCompletionMessageParam], messages),
+            **kwargs,
         )
 
         return response
