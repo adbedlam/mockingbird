@@ -1,10 +1,8 @@
-from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Protocol
 
 from src.mockingbird.datacls import Message
 
 
-class Processor(ABC):
-    @abstractmethod
-    def process(self, data_path: Path, *args, **kwargs) -> list[Message]:
-        pass
+class Processor(Protocol):
+    def process(self, data_path: Path, *args, **kwargs) -> list[Message]: ...

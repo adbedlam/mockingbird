@@ -2,10 +2,9 @@ import json
 from pathlib import Path
 
 from src.mockingbird.datacls import Message
-from src.mockingbird.preprocessing.processor import Processor
 
 
-class TelegramProcessor(Processor):
+class TelegramProcessor:
     def __init__(self):
         pass
 
@@ -27,10 +26,3 @@ class TelegramProcessor(Processor):
             messages.append(Message(message["text"]))
 
         return messages
-
-if __name__ == "main":
-    processor = TelegramProcessor()
-
-    messages = processor.process("data/raw/Nikita_Yaneev.json", "Иван Исаев")
-
-    print(messages[77])

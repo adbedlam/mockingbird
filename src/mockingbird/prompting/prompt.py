@@ -1,9 +1,9 @@
-from src.mockingbird.preprocessing.message import Message
+from typing import Protocol
 
-class Prompt:
+from src.mockingbird.datacls import Message
+
+
+class Prompt(Protocol):
     def build(
-            self,
-            examples: list[Message],
-            user_message: str
-    ) -> list[dict[str, str]]:
-        pass
+        self, examples: list[Message], user_message: str
+    ) -> list[dict[str, str]]: ...
