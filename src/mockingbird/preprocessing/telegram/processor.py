@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from ..processor import Processor
-from ..message import Message
+from src.mockingbird.datacls import Message
 
-class TelegramProcessor(Processor):
+
+class TelegramProcessor:
     def __init__(self):
         pass
 
@@ -15,11 +15,13 @@ class TelegramProcessor(Processor):
             data: dict = json.load(f)
 
         for message in data["messages"]:
-            if (not "from" in message or
-                not message["from"] == username or
-                not "text_entities" in message or
-                not message["text_entities"]
-                ): continue
+            if (
+                not "from" in message
+                or not message["from"] == username
+                or not "text_entities" in message
+                or not message["text_entities"]
+            ):
+                continue
 
             messages.append(Message(message["text"]))
 
