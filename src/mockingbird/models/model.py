@@ -1,11 +1,5 @@
-from abc import ABC, abstractmethod
+from typing import Protocol
 
-class Model(ABC):
-    @abstractmethod
-    def generate(
-        self,
-        messages: list[dict[str, str]],
-        *args,
-        **kwargs
-        ):
-        pass
+
+class Model(Protocol):
+    def generate(self, messages: list[dict[str, str]], *args, **kwargs): ...
