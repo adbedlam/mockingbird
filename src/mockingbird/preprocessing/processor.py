@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Protocol
 
-from src.mockingbird.datacls import Message
+from mockingbird.datacls import Message
 
 
 class Processor(Protocol):

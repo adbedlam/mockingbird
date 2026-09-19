@@ -8,6 +8,9 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "emoji>=2.16.0",
+    "httpx>=0.28.1",
+    "numpy>=2.5.3",
     "openai>=3.14.1",
 ]
 
@@ -37,5 +40,7 @@ src_paths = ["src"]
 [tool.mypy]
 python_version = "3.13"
 files = ["src"]
+mypy_path = "src"
+explicit_package_bases = true
 pretty = true
 show_error_codes = true

@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from src.mockingbird.datacls import Message
+from mockingbird.datacls import Message
 
 
 class Prompt(Protocol):

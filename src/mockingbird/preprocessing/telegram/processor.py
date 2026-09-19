@@ -1,7 +1,8 @@
 import json
+from datetime import datetime
 from pathlib import Path
 
-from src.mockingbird.datacls import Message
+from mockingbird.datacls import Message
 
 
 class TelegramProcessor:
@@ -23,6 +24,14 @@ class TelegramProcessor:
             ):
                 continue
 
-            messages.append(Message(message["text"]))
+            messages.append(
+                Message(
+                    message["text"],
+                    chat_id="1",
+                    user="1",
+                    user_id=1,
+                    timestamp=datetime.now(),
+                )
+            )
 
         return messages
