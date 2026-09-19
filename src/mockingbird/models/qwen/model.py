@@ -3,7 +3,7 @@ from typing import cast
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
-from src.mockingbird.datacls import Message
+from mockingbird.datacls import Message
 
 
 class Qwen:
@@ -72,7 +72,7 @@ class Qwen:
 
 
 if __name__ == "__main__":
-    from src.mockingbird.preprocessing.telegram.processor import TelegramProcessor
+    from mockingbird.preprocessing.telegram.processor import TelegramProcessor
 
     processor = TelegramProcessor()
 

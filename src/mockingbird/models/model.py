@@ -1,12 +1,12 @@
 from typing import Any, Protocol
 
-from src.mockingbird.datacls import Message
+from mockingbird.datacls import Message
 
 
 class Model(Protocol):
     def __init__(self, examples: list[Message], *args, **kwargs): ...
 
-    def _build_system_message(examples: list[Message]) -> dict[str, str]: ...
+    def _build_system_message(self, examples: list[Message]) -> dict[str, str]: ...
 
     def _generate(self, messages: list[dict[str, str]], *args, **kwargs) -> Any: ...
 

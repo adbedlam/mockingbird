@@ -42,5 +42,6 @@ python_version = "3.13"
 files = ["src"]
 mypy_path = "src"
 explicit_package_bases = true
+namespace_packages = true
 pretty = true
 show_error_codes = true
