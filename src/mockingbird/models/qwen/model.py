@@ -5,9 +5,13 @@ from openai.types.chat import ChatCompletionMessageParam
 
 from src.mockingbird.datacls import Message
 
+
 class Qwen:
     def __init__(
-        self, examples: list[Message], model: str = "qwen3-1.7b", base_url: str = "http://localhost:1234/v1"
+        self,
+        examples: list[Message],
+        model: str = "qwen3-1.7b",
+        base_url: str = "http://localhost:1234/v1",
     ):
         self.history: list[dict[str, str]] = [self._build_system_message(examples)]
 
@@ -30,16 +34,13 @@ class Qwen:
             "Examples:"
         )
         examples_block = "\n".join(f"- {example.text}" for example in examples)
-        return {
-                "role": "system",
-                "content": f"{instructions}\n{examples_block}"
-            }
-        
+        return {"role": "system", "content": f"{instructions}\n{examples_block}"}
+
     def _generate(self, messages: list[dict[str, str]], *args, **kwargs):
         return self.client.chat.completions.create(
             model=self.model,
             messages=cast(list[ChatCompletionMessageParam], messages),
-            **kwargs
+            **kwargs,
         )
 
     def converse(self) -> None:
@@ -56,7 +57,7 @@ class Qwen:
             self.history.append({"role": "user", "content": user_input})
 
             try:
-                response = self._generate(self.history) # why do I pass a member? idk
+                response = self._generate(self.history)  # why do I pass a member? idk
             except Exception as exception:
                 print(f"[error] {exception}")
 
@@ -76,10 +77,11 @@ if __name__ == "__main__":
     processor = TelegramProcessor()
 
     from pathlib import Path
+
     messages = processor.process(Path("data/raw/telegram/Username.json"), "Username")
 
     import random
+
     qwen = Qwen(random.sample(messages, k=400), model="qwen3-4b-instruct-2507")
 
     qwen.converse()
-

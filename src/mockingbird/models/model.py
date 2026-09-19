@@ -1,5 +1,7 @@
-from typing import Protocol, Any
+from typing import Any, Protocol
+
 from src.mockingbird.datacls import Message
+
 
 class Model(Protocol):
     def __init__(self, examples: list[Message], *args, **kwargs): ...
