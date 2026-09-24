@@ -13,8 +13,7 @@ class TelegramProcessor:
         with data_path.open("r", encoding="utf-8") as file:
             data: dict = json.load(file)
 
-        conversation = Conversation(chat_id=data["id"], user=data["name"], messages=[])
-
+        messages = []
         for message in data["messages"]:
             if (
                 not "from" in message
@@ -25,12 +24,15 @@ class TelegramProcessor:
                 continue
 
             timestamp = datetime.fromisoformat(message["date"])
+
             from_other = message["from"] == data["name"]
+
             if from_other:
-                conversation.messages.append(Message("", timestamp, from_other))
+                messages.append(Message("", timestamp, from_other))
                 continue
 
             text = message["text"]
+
             if isinstance(text, list):
                 text = "".join(
                     sent if isinstance(sent, str) else sent.get("text", "")
@@ -40,6 +42,6 @@ class TelegramProcessor:
             if not text:
                 continue
 
-            conversation.messages.append(Message(text, timestamp, from_other))
+            messages.append(Message(text, timestamp, from_other))
 
-        return conversation
+        return Conversation(chat_id=data["id"], user=data["name"], messages=messages)

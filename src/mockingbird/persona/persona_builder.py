@@ -2,10 +2,10 @@ import numpy as np
 
 from mockingbird.analysis.stats import (
     avg_message_len,
-    message_bursts,
     emoji_frequency,
-    response_latencies,
+    message_bursts,
     most_common_emojis,
+    response_latencies,
 )
 from mockingbird.datacls import (
     BehavioralPatterns,
@@ -15,12 +15,13 @@ from mockingbird.datacls import (
     Lexicon,
     MessagingPatterns,
     Persona,
+    Username,
 )
 
 
 def build_persona(conversations: list[Conversation]) -> Persona:
-    persona = Persona()
 
+    communication_styles: dict[Username, CommunicationStyle] = {}
     for conversation in conversations:
         messages = conversation.messages
 
@@ -30,11 +31,13 @@ def build_persona(conversations: list[Conversation]) -> Persona:
         persona_messages = [message for message in messages if not message.from_other]
 
         bursts = message_bursts(persona_messages)
-        latencies = response_latencies(persona_messages)
+        latencies = [
+            latency.total_seconds() for latency in response_latencies(persona_messages)
+        ]
 
         messaging_patterns = MessagingPatterns(
-            np.max(bursts),
-            np.mean(bursts),
+            float(np.max(bursts)),
+            float(np.mean(bursts)),
             np.median(latencies),
             np.mean(latencies),
         )
@@ -43,9 +46,9 @@ def build_persona(conversations: list[Conversation]) -> Persona:
             emoji_frequency(persona_messages), most_common_emojis(persona_messages)
         )
 
-        lexicon = Lexicon([], [])  # idk about that honestly, fix pls
+        lexicon = Lexicon([], [])
 
-        persona.communication_styles[conversation.user] = CommunicationStyle(
+        communication_styles[conversation.user] = CommunicationStyle(
             avg_message_len(persona_messages),
             emoji_use,
             messaging_patterns,
@@ -53,4 +56,7 @@ def build_persona(conversations: list[Conversation]) -> Persona:
             [],  # TODO
         )
 
-    persona.behavioral_patterns = BehavioralPatterns([])  # TODO
+    return Persona(
+        communication_styles,
+        BehavioralPatterns(),
+    )
