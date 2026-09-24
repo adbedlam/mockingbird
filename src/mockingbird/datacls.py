@@ -53,24 +53,3 @@ class BehavioralPatterns:
 
 
 type Username = str
-
-
-@dataclass
-class Persona:
-    communication_styles: dict[Username, CommunicationStyle]
-    behavioral_patterns: BehavioralPatterns = field(default_factory=BehavioralPatterns)
-
-    def describe_length(self, avg_len: float) -> str:
-        if avg_len < 20:
-            return "обычно пишет очень коротко"
-        if avg_len < 60:
-            return "пишет сообщения средней длины"
-        return "часто пишет развёрнуто"
-
-    def to_system_prompt(self, username: str) -> str:
-        # style = self.communication_styles[username]
-        # words = ", ".join(w for w, _ in style.distinctive_words[:5])
-        # phrases = ", ".join([p for p, _ in style.distinctive_phrases[:5]])
-        # emojis = "".join(e for e, _ in style.most_common_emojis)
-
-        return "sys prompt"
