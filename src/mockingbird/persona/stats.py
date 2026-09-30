@@ -106,8 +106,7 @@ def ngram_frequency(messages: list[Message], n: int = 2) -> Counter[str]:
 def distinctive_ngrams(
     freq_a: Counter[str], freq_b: Counter[str], top_k: int = 15
 ) -> list[tuple[str, float]]:
-    # I don't think this is a very good measure at all
-    # comparing against the other user is a very poor baseline
+    # need to do proper statistics
     total_a, total_b = sum(freq_a.values()), sum(freq_b.values())
     scores = {}
     for phrase, count_a in freq_a.items():

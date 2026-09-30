@@ -3,35 +3,25 @@ from typing import cast
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
+from mockingbird.datacls import ConversationHistory, Response
+
 
 class Qwen:
     def __init__(
-        self, model: str = "qwen3-1.7b", base_url: str = "http://localhost:1234/v1"
+        self,
+        model: str = "qwen3-4b-instruct-2507",
+        host: str = "http://localhost:1234/v1",
+        api_key: str = "unused",
     ):
-        self.client = OpenAI(base_url=base_url, api_key="not-needed")
+        self.client = OpenAI(base_url=host, api_key=api_key)
 
         self.model = model
 
-    def generate(self, messages: list[dict[str, str]], *args, **kwargs):
+    def generate(self, history: ConversationHistory, *args, **kwargs) -> Response:
         response = self.client.chat.completions.create(
             model=self.model,
-            messages=cast(list[ChatCompletionMessageParam], messages),
+            messages=cast(list[ChatCompletionMessageParam], history),
             **kwargs,
         )
 
-        return response
-
-
-if __name__ == "__main__":
-    qwen = Qwen()
-
-    response = qwen.generate(
-        [
-            {
-                "role": "user",
-                "content": "What is 2 + 2?",
-            }
-        ]
-    )
-
-    print(response)
+        return Response(response.choices[0].message.content)
