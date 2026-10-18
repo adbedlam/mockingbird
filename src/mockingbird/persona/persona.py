@@ -1,66 +1,16 @@
-import numpy as np
-
-from mockingbird.analysis.stats import (
-    avg_message_len,
-    emoji_frequency,
-    message_bursts,
-    most_common_emojis,
-    response_latencies,
-)
-from mockingbird.datacls import (
-    BehavioralPatterns,
-    CommunicationStyle,
-    Conversation,
-    EmojiUse,
-    Lexicon,
-    MessagingPatterns,
-    Username,
-)
+# from mockingbird.persona.expression import CommunicationStyle
+# from mockingbird.persona.inner import CorePersonality
 
 
-class Persona:
-    def __init__(self, conversations: list[Conversation]):
-        self.communication_styles: dict[Username, CommunicationStyle] = {}
+# class Persona:
+#     core_personality: CorePersonality
+#     communication_style: CommunicationStyle
 
-        for conversation in conversations:
-            messages = conversation.messages
+# def __init__(
+#     self, core_personality: CorePersonality, communication_style: CommunicationStyle
+# ):
+#     self.core_personality = core_personality
+#     self.communication_style = communication_style
 
-            if not messages:
-                continue
-
-            persona_messages = [
-                message for message in messages if not message.from_other
-            ]
-
-            bursts = message_bursts(persona_messages)
-            latencies = [
-                latency.total_seconds()
-                for latency in response_latencies(persona_messages)
-            ]
-
-            messaging_patterns = MessagingPatterns(
-                float(np.max(bursts)),
-                float(np.mean(bursts)),
-                np.median(latencies),
-                np.mean(latencies),
-            )
-
-            emoji_use = EmojiUse(
-                emoji_frequency(persona_messages), most_common_emojis(persona_messages)
-            )
-
-            lexicon = Lexicon([], [])
-
-            self.communication_styles[conversation.user] = CommunicationStyle(
-                avg_message_len(persona_messages),
-                emoji_use,
-                messaging_patterns,
-                lexicon,
-                [],  # TODO
-            )
-
-        self.behavioral_patterns = BehavioralPatterns()
-
-    def generate_system_prompt(self, username: str) -> str:
-        # TODO
-        return f"act like {username}"
+# def generate_system_prompt(self) -> str:
+#     return self.communication_style.build_prompt()
