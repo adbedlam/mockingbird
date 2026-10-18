@@ -90,6 +90,7 @@ class Inner:
     def __str__(self) -> str:
         return self.inner_prompt
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Build a raw personality prompt from a Telegram chat export."
