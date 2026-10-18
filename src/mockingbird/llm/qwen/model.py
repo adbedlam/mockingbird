@@ -1,12 +1,14 @@
+from dataclasses import dataclass
 from typing import cast
 
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
-from mockingbird.datacls import ConversationHistory, Response
+from mockingbird.llm.model import Message, Model
 
 
-class Qwen:
+@dataclass
+class Qwen(Model):
     def __init__(
         self,
         model: str = "qwen3-4b-instruct-2507",
@@ -17,11 +19,11 @@ class Qwen:
 
         self.model = model
 
-    def generate(self, history: ConversationHistory, *args, **kwargs) -> Response:
+    def complete(self, history: list[Message], *args, **kwargs) -> str:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=cast(list[ChatCompletionMessageParam], history),
             **kwargs,
         )
 
-        return Response(response.choices[0].message.content)
+        return response.choices[0].message.content

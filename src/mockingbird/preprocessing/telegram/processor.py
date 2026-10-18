@@ -2,14 +2,17 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from mockingbird.datacls import Conversation, Message
+from mockingbird.conversation.history import History
+from mockingbird.conversation.message import Message
+from mockingbird.conversation.username import Username
+from mockingbird.preprocessing.processor import Processor
 
 
-class TelegramProcessor:
+class TelegramProcessor(Processor):
     def __init__(self):
         pass
 
-    def process(self, data_path: Path) -> Conversation:
+    def process(self, user: Username, other: Username, data_path: Path) -> History:
         with data_path.open("r", encoding="utf-8") as file:
             data: dict = json.load(file)
 
@@ -23,13 +26,10 @@ class TelegramProcessor:
             ):
                 continue
 
-            timestamp = datetime.fromisoformat(message["date"])
-
-            from_other = message["from"] == data["name"]
-
-            if from_other:
-                messages.append(Message("", timestamp, from_other))
+            if not (message["from"] == user or message["from"] == other):
                 continue
+
+            timestamp = datetime.fromisoformat(message["date"])
 
             text = message["text"]
 
@@ -42,6 +42,6 @@ class TelegramProcessor:
             if not text:
                 continue
 
-            messages.append(Message(text, timestamp, from_other))
+            messages.append(Message(message["from"], text, timestamp))
 
-        return Conversation(chat_id=data["id"], user=data["name"], messages=messages)
+        return History(user, other, messages)

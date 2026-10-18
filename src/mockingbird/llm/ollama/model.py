@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import httpx2
 
-from mockingbird.models.model import ConversationHistory, Response
+from mockingbird.llm.model import Message
 
 
 @dataclass
@@ -17,15 +17,15 @@ class OllamaModel:
         self.host = host
         self.timeout = timeout
 
-    def generate(self, messages: ConversationHistory) -> Response:
+    def complete(self, history: list[Message], *args, **kwargs) -> str:
         response = httpx2.post(
             url=f"{self.host}/api/chat",
             json={
                 "model": self.model,
-                "messages": messages,
+                "messages": history,
                 "stream": False,
             },
             timeout=self.timeout,
         )
         response.raise_for_status()
-        return Response(response.json()["message"]["content"])
+        return response.json()["message"]["content"]
