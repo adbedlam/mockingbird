@@ -8,5 +8,6 @@
    - [ ] Lexicon
    - [ ] Messaging manner
    - [ ] Temporal
- - [ ] Train a model or a few to predict the features of the response (gradient boosting probably).
+ - [ ] Train a model or a few to predict the features of the response (gradient boosting probably)
  - [ ] Create a harness to insert a system message based on the model's output
+ - [ ] Come up with some sort of comprehensive model for message timing

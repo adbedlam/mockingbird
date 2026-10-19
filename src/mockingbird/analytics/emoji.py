@@ -6,7 +6,7 @@ from mockingbird.conversation.message import Message
 
 
 def most_common_emojis(
-    messages: list[Message], top_k: int = 5
+    messages: list[Message], top_k: int = 8
 ) -> list[tuple[str, int]]:
     counts: Counter[str] = Counter()
 
@@ -18,4 +18,10 @@ def most_common_emojis(
 
 
 def emoji_frequency(messages: list[Message]) -> float:
+    if not messages:
+        return 0.0
     return sum(emoji.emoji_count(message.text) for message in messages) / len(messages)
+
+
+def message_emoji_count(message: Message) -> int:
+    return emoji.emoji_count(message.text)
