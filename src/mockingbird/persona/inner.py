@@ -118,8 +118,8 @@ class Inner:
     ) -> None:
         if messages is not None and model is not None:
             prompt: list[llm.Message] = [
-                llm.Message(Role.SYSTEM, PERSONALITY_SYSTEM_PROMPT),
-                llm.Message(Role.USER, _samples_text(messages)),
+                llm.Message(role=Role.SYSTEM, content=PERSONALITY_SYSTEM_PROMPT),
+                llm.Message(role=Role.USER, content=_samples_text(messages)),
             ]
             self.inner_prompt = model.complete(prompt)
         else:

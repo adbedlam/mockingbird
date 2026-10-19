@@ -1,7 +1,8 @@
 import os
-from typing import Any
+from typing import Any, cast
 
 from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageParam
 
 from mockingbird.llm.message import Message
 
@@ -15,7 +16,9 @@ class LLM:
     ) -> None:
         self.model = model
         key = api_key or os.getenv("LLM_API_KEY")
-        if key is None and not host.startswith(("http://localhost", "http://127.0.0.1")):
+        if key is None and not host.startswith(
+            ("http://localhost", "http://127.0.0.1")
+        ):
             raise ValueError(
                 f"Host {host!r} looks remote but no API key was given "
                 "(pass api_key= or set LLM_API_KEY)."
@@ -33,7 +36,7 @@ class LLM:
     ) -> str:
         response = self._client.chat.completions.create(
             model=self.model,
-            messages=messages,
+            messages=cast(list[ChatCompletionMessageParam], messages),
             temperature=temperature,
             **kwargs,
         )

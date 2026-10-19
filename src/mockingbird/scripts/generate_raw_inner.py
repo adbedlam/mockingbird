@@ -5,13 +5,14 @@ from mockingbird.paths import PROJECT_ROOT
 from mockingbird.persona.inner import raw_prompt
 from mockingbird.preprocessing.factory import make_processor
 
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("data_path", type=Path)
     parser.add_argument("user")
     parser.add_argument("other")
     parser.add_argument(
-        "--output-root", type=Path, default=PROJECT_ROOT/"data"/"processed"
+        "--output-root", type=Path, default=PROJECT_ROOT / "data" / "processed"
     )
     parser.add_argument("--max-samples", type=int, default=None)
     args = parser.parse_args()
