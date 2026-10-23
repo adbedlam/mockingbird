@@ -1,13 +1,13 @@
 # TODO
 
  - [ ] Do feature extraction
-   - [ ] Topic
+   - [x] Topic
    - [x] Emoji
-   - [ ] Emotion
+   - [x] Emotion
    - [x] Leghth
-   - [ ] Lexicon
+   - [x] Lexicon
    - [ ] Messaging manner
    - [ ] Temporal
- - [ ] Train a model or a few to predict the features of the response (gradient boosting probably)
- - [ ] Create a harness to insert a system message based on the model's output
+ - [ ] Make the model annotate messages in chunks and per feature (too difficult at once)
+ - [ ] Train a model or a few to predict the features of the response
  - [ ] Come up with some sort of comprehensive model for message timing

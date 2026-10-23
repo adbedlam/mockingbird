@@ -1,12 +1,8 @@
-from pathlib import Path
-
 from mockingbird.preprocessing.telegram.processor import TelegramProcessor
 
 
-def make_processor(data_path: Path):
-    parts = set(data_path.resolve().parts)
-
-    if "telegram" in parts:
+def make_processor(messenger: str):
+    if messenger == "telegram":
         return TelegramProcessor()
 
-    raise SystemExit(f"Cannot pick a preprocessor for {data_path}")
+    raise SystemExit(f"Cannot pick a preprocessor for {messenger}")

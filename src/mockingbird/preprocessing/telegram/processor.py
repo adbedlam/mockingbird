@@ -12,7 +12,7 @@ class TelegramProcessor(Processor):
     def __init__(self):
         pass
 
-    def process(self, user: Username, other: Username, data_path: Path) -> History:
+    def process(self, data_path: Path, user: Username, other: Username) -> History:
         with data_path.open("r", encoding="utf-8") as file:
             data: dict = json.load(file)
 
@@ -20,13 +20,9 @@ class TelegramProcessor(Processor):
         for message in data["messages"]:
             if (
                 not "from" in message
-                or "forwarded_from" in message
                 or not "text_entities" in message
                 or not message["text_entities"]
             ):
-                continue
-
-            if not (message["from"] == user or message["from"] == other):
                 continue
 
             timestamp = datetime.fromisoformat(message["date"])
@@ -42,6 +38,10 @@ class TelegramProcessor(Processor):
             if not text:
                 continue
 
-            messages.append(Message(message["from"], text, timestamp))
+            if "forwarded_from" in message:
+                author = message["forwarded_from"]
+            elif message["from"] == user or message["from"] == other:
+                author = message["from"]
+            messages.append(Message(author, text, timestamp))
 
         return History(user, other, messages)
