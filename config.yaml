@@ -6,15 +6,20 @@ other: Nikita Yaneev
 
 llm:
   host: https://openrouter.ai/api/v1
-  model: qwen/qwen3.5-35b-a3b
+  model: openai/gpt-6-luna
   building_temperature: 0.3
   inference_temperature: 0.7
 
 analytics:
-  max_messages: 3000
+  max_messages: 300
   ngrams:
     max_n: 4
     top_k: 50
+  annotation:
+    window_length: 100
+    window_overlap: 30
+    retries: 2
+  local_expression_embedding_model: intfloat/multilingual-e5-small
 
 paths:
   raw: data/raw

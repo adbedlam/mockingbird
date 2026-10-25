@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 from mockingbird.conversation import message as conversation
@@ -18,6 +17,6 @@ class History:
 
     def to_samples(self) -> str:
         return "\n".join(
-            f"{message.author}@{message.timestamp} | {message.text}"
+            f"[{message.id}] {message.author}@{message.timestamp} | {message.text}"
             for message in self.messages
         )
