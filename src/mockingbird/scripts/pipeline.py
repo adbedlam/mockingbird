@@ -1,14 +1,9 @@
 from pathlib import Path
 
-from mockingbird.analytics.emoji import most_common_emojis
-from mockingbird.analytics.lexicon import top_ngrams
+
 from mockingbird.config import load_config
 from mockingbird.llm.client import LLM
-from mockingbird.persona.inner import (
-    build_emoji_prompt,
-    build_lexicon_prompt,
-    build_personality_prompt,
-)
+from mockingbird.persona.inner import build_inner_prompt
 from mockingbird.preprocessing.factory import make_processor
 
 
@@ -45,17 +40,6 @@ def main() -> None:
     if not history.users_messages():
         raise SystemExit(f"No messages found for {user!r} in {raw_file.absolute()}")
 
-    # Run the LLM independent analysis
-    print(f"Running the LLM independent analysis")
-
-    ngram_config = analytics_config["ngrams"]
-    ngrams: list[list[str]] = [
-        top_ngrams(history, n, ngram_config["top_k"])
-        for n in range(1, ngram_config["max_n"] + 1)
-    ]
-    emojis: list[str] = most_common_emojis(history)
-
-    # Create the model
     print("Creating a model...")
     llm_config = config["llm"]
     model = LLM(llm_config["host"], llm_config["model"], llm_config["api_key"])
@@ -63,13 +47,8 @@ def main() -> None:
     # Build inner prompt
     print("Building the inner prompt...")
     building_temperature = llm_config["building_temperature"]
-    personality = build_personality_prompt(
+    inner = build_inner_prompt(
         history, model, temperature=building_temperature
-    )
-    lexicon = build_lexicon_prompt(ngrams, model, temperature=building_temperature)
-    emoji = build_emoji_prompt(emojis)
-    inner = "\n\n".join(
-        string.rstrip() for string in (personality, lexicon, emoji) if string
     )
 
     # Save inner prompt
