@@ -2,8 +2,10 @@
 
  - [ ] Do feature extraction
    - [x] Emoji
+   - [ ] Emotion
    - [x] Leghth
-   - [x] Lexicon
+   - [ ] Lexicon
    - [ ] Messaging manner
    - [ ] Temporal
- - [ ] Come up with some sort of comprehensive model for message timing
+ - [ ] Train a model or a few to predict the features of the response (gradient boosting probably).
+ - [ ] Create a harness to insert a system message based on the model's output
