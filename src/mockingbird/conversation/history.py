@@ -12,11 +12,8 @@ class History:
     other: Username
     messages: list[conversation.Message]
 
-    def users_messages(self) -> list[conversation.Message]:
-        return [message for message in self.messages if message.author == self.user]
-
     def to_samples(self) -> str:
         return "\n".join(
-            f"[{message.id}] {message.author}@{message.timestamp} | {message.text}"
+            f"{message.author}@{message.timestamp} | {message.text}"
             for message in self.messages
         )
