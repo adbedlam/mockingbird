@@ -11,9 +11,7 @@ def main() -> None:
     config = load_config()
 
     filename = config["filename"]
-
     user = config["user"]
-
     other = config["other"]
 
     print(
@@ -39,7 +37,7 @@ def main() -> None:
     print(f"Using the first {max_messages} to build the inner prompt")
 
     history.messages = history.messages[0 : config["max_messages"]]
-    if not history.users_messages():
+    if not history.messages:
         raise SystemExit(f"No messages found for {user!r} in {raw_file.absolute()}")
 
     print("Creating a model...")

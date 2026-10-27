@@ -21,6 +21,7 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
         if not path.is_absolute():
             path = PROJECT_ROOT / path
         config["paths"][key] = path
+
     return config
 
 
