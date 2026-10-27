@@ -3,8 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 from mockingbird.conversation.history import History
-from mockingbird.conversation.message import Message
-from mockingbird.conversation.username import Username
+from mockingbird.conversation.message import Message, Username
 from mockingbird.preprocessing.processor import Processor
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mockingbird.conversation import message as conversation
-from mockingbird.conversation.username import Username
+from mockingbird.conversation.message import Username
 
 
 @dataclass

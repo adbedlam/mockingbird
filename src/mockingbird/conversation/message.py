@@ -2,11 +2,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import uuid4
 
-from mockingbird.conversation.username import Username
-
 
 def _new_message_id() -> str:
     return uuid4().hex[:8]
+
+
+type Username = str
 
 
 @dataclass

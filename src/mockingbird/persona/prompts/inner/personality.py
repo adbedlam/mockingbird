@@ -1,7 +1,7 @@
 PERSONALITY = """
 ## Personality and Conversational Behavior
 
-Describe stable, observable tendencies relevant to how Person A communicates.
+Describe stable, observable tendencies relevant to how {user} communicates.
 
 Consider:
 - Temperament and typical emotional expressiveness.

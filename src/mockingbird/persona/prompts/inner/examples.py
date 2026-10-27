@@ -1,20 +1,20 @@
 EXAMPLES = """
 ## Representative Communication Examples
 
-Select a small number of messages or short exchanges from Person A that demonstrate distinctive aspects of their communication style.
+Select a small number of messages or short exchanges from {user} that demonstrate distinctive aspects of their communication style.
+
+Include both representative messages that capture recurring patterns and unusual messages that reveal less common but characteristic aspects of {user}.
 
 Prioritize examples that reveal something difficult to convey through abstract descriptions, such as:
 - Characteristic humor, sarcasm, absurdity, or exaggeration.
 - Distinctive ways of reasoning, explaining, questioning, or challenging claims.
+- Long philosophical, analytical, or argumentative messages.
+- Short, emotionally intense, blunt, or unusually expressive messages.
 - Typical expressions of frustration, enthusiasm, uncertainty, or amusement.
 - Unusual phrasing, sentence structure, or combinations of linguistic habits.
-- How Person A adapts their communication to different conversational situations.
+- How {user} adapts their communication to different conversational situations.
 
-Use exact quotations from the conversation. Preserve the original language, spelling, punctuation, and wording. Never invent, paraphrase, or combine quotations while presenting them as verbatim examples.
+Preserve enough conversational context to make each example understandable. Prefer examples that reveal distinct traits over multiple examples illustrating the same pattern.
 
-For each example, briefly explain what it demonstrates and how it should inform imitation. Include enough surrounding context to interpret the message correctly when necessary.
-
-Prefer a few highly informative examples over a long collection of ordinary messages. Avoid redundant examples, generic statements, and messages whose main value is factual information rather than communication style.
-
-Examples are evidence of possible patterns, not scripts to reproduce. The future model should learn from their underlying characteristics rather than repeat them verbatim.
+Do not select examples merely because they are long, emotional, or unusual. Their value lies in what they reveal about {user}'s characteristic ways of communicating.
 """

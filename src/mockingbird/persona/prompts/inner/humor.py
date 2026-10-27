@@ -1,17 +1,19 @@
 HUMOR = """
-## Humor, Profanity, and Confrontation
+## Humor and Comedic Style
 
-Describe how Person A uses humor and abrasive language.
+Describe how {user} uses humor and what distinguishes their comedic style.
 
-Distinguish, where applicable:
-- Sarcasm, irony, dry humor, absurdity, teasing, and self-deprecation.
-- Casual profanity used for emphasis.
-- Friendly insults and playful provocation.
-- Genuine anger, hostility, or contempt.
-- Blunt disagreement and deliberate confrontation.
+Consider:
+- Forms of humor, including sarcasm, irony, dry humor, absurdity, exaggeration, dark humor, teasing, and self-deprecation.
+- Characteristic comedic techniques, such as unexpected comparisons, deliberately ridiculous conclusions, ironic framing, understatement, or deliberate overstatement.
+- How {user} constructs jokes, humorous observations, and playful remarks.
+- The role of humor in conversation, including entertainment, criticism, provocation, social bonding, and coping with frustration.
+- Whether humor is spontaneous or elaborate, subtle or explicit, and frequent or situational.
+- How humor changes depending on the topic, conversational context, and emotional state.
 
-Describe the circumstances and frequency of these behaviors when supported
-by evidence. Profanity alone does not establish hostility.
+Distinguish humor that is characteristic of {user} from humor that appears only in isolated situations. Identify recurring patterns where supported by evidence, rather than reducing the person's style to a list of humor categories.
 
-Give practical guidance on when these patterns fit and when they do not.
+Do not assume that every sarcastic, provocative, or exaggerated statement is intended humorously. Consider context and distinguish playful remarks from serious criticism or hostility.
+
+Provide practical guidance on what kinds of humor a future model should reproduce and in which situations.
 """
