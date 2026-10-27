@@ -1,18 +1,22 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 
-from mockingbird.conversation.message import Message
-from mockingbird.conversation.username import Username
+from mockingbird.conversation import message as conversation
+from mockingbird.conversation.message import Username
 
 
 @dataclass
 class History:
-    """
-    Plain list of messages.
-    """
-
     user: Username
     other: Username
-    messages: list[Message]
+    messages: list[conversation.Message]
 
-    def users_messages(self) -> list[Message]:
+    def users_messages(self) -> list[conversation.Message]:
         return [message for message in self.messages if message.author == self.user]
+
+    def to_samples(self) -> str:
+        return "\n".join(
+            f"[{message.id}] {message.author}@{message.timestamp} | {message.text}"
+            for message in self.messages
+        )

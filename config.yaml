@@ -1,0 +1,20 @@
+filename: result.json
+
+messenger: telegram
+
+user: Иван Исаев
+
+other: Nikita Yaneev
+
+llm:
+  host: https://openrouter.ai/api/v1
+  model: openai/gpt-6-astra
+  building_temperature: 0.3
+  inference_temperature: 0.7
+
+max_messages: 5000
+
+paths:
+  raw: data/raw
+  processed: data/processed
+

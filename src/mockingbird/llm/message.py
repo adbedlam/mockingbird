@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Protocol, TypedDict
+from typing import TypedDict
 
 
 class Role(StrEnum):
@@ -11,7 +11,3 @@ class Role(StrEnum):
 class Message(TypedDict):
     role: Role
     content: str
-
-
-class Model(Protocol):
-    def complete(self, history: list[Message], *args, **kwargs) -> str: ...

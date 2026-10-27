@@ -1,34 +1,52 @@
-# from mockingbird.llm.model import Model
-# from mockingbird.persona.persona import Persona
+from pathlib import Path
+
+from mockingbird.config import load_config
+from mockingbird.llm.client import LLM
+from mockingbird.llm.message import Message, Role
+from mockingbird.prompts.imitation import IMITATION
+from mockingbird.prompts.supress_llm_behavior import SUPRESS_LLM_BEHAVIOR
 
 
-# class Mockingbird:
-#     def __init__(self, persona: Persona, model: Model):
-#         self.persona = persona
-#         self.model = model
-#         self.history = [{"role": "system", "content": persona.generate_system_prompt()}]
+class Mockingbird:
+    def __init__(self):
+        config = load_config()
 
-#     def mock(self) -> None:
-#         while True:
-#             try:
-#                 user_input = input("user> ").strip()
-#             except (EOFError, KeyboardInterrupt):
-#                 break
+        user = config["user"]
 
-#             if not user_input:
-#                 continue
+        other = config["other"]
 
-#             self.history.append({"role": "user", "content": user_input})
+        processed_path = config["paths"]["processed"]
+        conversation_folder = f"{user}_{other}".replace(" ", "_")
+        inner_prompt_path: Path = (
+            processed_path / conversation_folder / "inner_prompt.txt"
+        )
 
-#             try:
-#                 response = self.model.complete(self.history)
-#             except Exception as exception:
-#                 print(f"[error] {exception}")
+        inner_prompt = inner_prompt_path.read_text(encoding="utf-8")
+        system_prompt = IMITATION + inner_prompt + SUPRESS_LLM_BEHAVIOR
 
-#                 self.history.pop()
+        llm_config = config["llm"]
+        self.model = LLM(llm_config["host"], llm_config["model"], llm_config["api_key"])
+        self.inference_temperature = llm_config["inference_temperature"]
 
-#                 continue
+        self.conversation_history: list[Message] = []
+        self.conversation_history.append(
+            Message(role=Role.SYSTEM, content=system_prompt)
+        )
 
-#             self.history.append({"role": "assistant", "content": response.text})
+    def mock(self):
+        while True:
+            user_input = input("user>")
 
-#             print(f"mockingbird> {response.text}")
+            self.conversation_history.append(
+                Message(role=Role.USER, content=user_input)
+            )
+
+            response = self.model.complete(
+                self.conversation_history, temperature=self.inference_temperature
+            )
+
+            self.conversation_history.append(
+                Message(role=Role.ASSISTANT, content=response)
+            )
+
+            print(f"mockingbird>{response}")
