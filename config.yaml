@@ -12,7 +12,13 @@ llm:
   building_temperature: 0.3
   inference_temperature: 0.7
 
-max_messages: 5000
+message_selection:
+  build_start: 0
+  build_num: 5000
+  evaluation_start: 7000
+  evaluation_num: 1500
+  evaluation_window: 15
+  max_predictions: 30
 
 paths:
   raw: data/raw

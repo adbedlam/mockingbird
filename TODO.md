@@ -1,4 +1,4 @@
 # TODO
 
- - [ ] Evaluate agent performance on unseen messages.
+ - [x] Evaluate agent performance on unseen messages.
 

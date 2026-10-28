@@ -33,12 +33,14 @@ def main() -> None:
     history = processor.process(raw_file, user, other)
     print(f"Reading the conversation yielded {len(history.messages)} messages")
 
-    max_messages = config["max_messages"]
-    print(f"Using the first {max_messages} to build the inner prompt")
+    message_config = config["message_selection"]
+    message_start = message_config["build_start"]
+    message_end = message_start + message_config["build_num"]
+    print(f"Using messages {message_start} to {message_end} to build the inner prompt")
 
-    history.messages = history.messages[0 : config["max_messages"]]
+    history.messages = history.messages[message_start:message_end]
     if not history.messages:
-        raise SystemExit(f"No messages found for {user!r} in {raw_file.absolute()}")
+        raise SystemExit(f"Message history is empty")
 
     print("Creating a model...")
     llm_config = config["llm"]
