@@ -72,9 +72,9 @@ class Mockingbird:
 
     def chirp(self) -> str:
         return self.model.complete(
-            self.conversation_history,
-            temperature=self.inference_temperature
+            self.conversation_history, temperature=self.inference_temperature
         )
+
 
 def main() -> None:
     mockingbird = Mockingbird()
