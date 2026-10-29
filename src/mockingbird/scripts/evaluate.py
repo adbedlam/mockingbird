@@ -1,12 +1,13 @@
 from collections.abc import Iterator
-from pathlib import Path
 from itertools import islice
+from pathlib import Path
 
-from mockingbird.conversation.message import Message
-from mockingbird.conversation.history import History
-from mockingbird.preprocessing.factory import make_processor
-from mockingbird.mockingbird import Mockingbird
 from mockingbird.config import load_config
+from mockingbird.conversation.history import History
+from mockingbird.conversation.message import Message
+from mockingbird.mockingbird import Mockingbird
+from mockingbird.preprocessing.factory import make_processor
+
 
 def main() -> None:
     config = load_config()
@@ -20,7 +21,7 @@ def main() -> None:
     processor = make_processor(config["messenger"])
 
     history = processor.process(raw_file, user, other)
-    
+
     message_config = config["message_selection"]
     message_start = message_config["evaluation_start"]
     message_end = message_start + message_config["evaluation_num"]
@@ -29,7 +30,7 @@ def main() -> None:
 
     window_size = message_config["evaluation_window"]
     sequences = find_sequences(history, user, other, window_size)
-    
+
     processed_path: Path = config["paths"]["processed"]
     processed_path = processed_path / f"{user}_{other}".replace(" ", "_")
     processed_path.mkdir(parents=True, exist_ok=True)
@@ -47,7 +48,7 @@ def main() -> None:
 
             for message in sequence[:-1]:
                 file.write(f"{message.author}: {message.text}\n")
-            
+
             file.write("actual: ")
             file.write(f"{sequence[-1].text}\n")
 
@@ -55,7 +56,8 @@ def main() -> None:
             file.write(mockingbird.chirp() + "\n\n")
 
             mockingbird.kill()
-    
+
+
 def find_sequences(
     history: History,
     user: str,
@@ -74,6 +76,7 @@ def find_sequences(
             start += window_size
         else:
             start += 1
+
 
 if __name__ == "__main__":
     main()
