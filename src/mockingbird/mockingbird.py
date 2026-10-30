@@ -10,25 +10,14 @@ from mockingbird.prompts.supress_llm_behavior import SUPRESS_LLM_BEHAVIOR
 
 
 class Mockingbird:
-    def __init__(self):
-        config = load_config()
+    def __init__(self, user: str, other: str, model: LLM, prompt_path: Path):
+        self.user = user
+        self.other = other
 
-        self.user = config["user"]
-
-        self.other = config["other"]
-
-        processed_path = config["paths"]["processed"]
-        conversation_folder = f"{self.user}_{self.other}".replace(" ", "_")
-        inner_prompt_path: Path = (
-            processed_path / conversation_folder / "inner_prompt.txt"
-        )
-
-        inner_prompt = inner_prompt_path.read_text(encoding="utf-8")
+        inner_prompt = prompt_path.read_text(encoding="utf-8")
         system_prompt = IMITATION + inner_prompt + SUPRESS_LLM_BEHAVIOR
 
-        llm_config = config["llm"]
-        self.model = LLM(llm_config["host"], llm_config["model"], llm_config["api_key"])
-        self.inference_temperature = llm_config["inference_temperature"]
+        self.model = model
 
         self.conversation_history: list[llm.Message] = []
         self.conversation_history.append(
@@ -60,9 +49,7 @@ class Mockingbird:
                 llm.Message(role=Role.USER, content=user_input)
             )
 
-            response = self.model.complete(
-                self.conversation_history, temperature=self.inference_temperature
-            )
+            response = self.model.complete(self.conversation_history)
 
             self.conversation_history.append(
                 llm.Message(role=Role.ASSISTANT, content=response)
@@ -71,13 +58,32 @@ class Mockingbird:
             print(f"mockingbird>{response}")
 
     def chirp(self) -> str:
-        return self.model.complete(
-            self.conversation_history, temperature=self.inference_temperature
-        )
+        return self.model.complete(self.conversation_history)
 
 
 def main() -> None:
-    mockingbird = Mockingbird()
+    config = load_config()
+
+    user = config["user"]
+
+    other = config["other"]
+
+    inference_config = config["inference_model"]
+    model = LLM(
+        inference_config["host"],
+        inference_config["model"],
+        inference_config["api_key"],
+        inference_config["temperature"],
+    )
+
+    prompt_path = (
+        config["paths"]["processed"]
+        / f"{user}_{other}".replace(" ", "_")
+        / "inner_prompt.txt"
+    )
+
+    mockingbird = Mockingbird(user, other, model, prompt_path)
+
     mockingbird.sing()
 
 

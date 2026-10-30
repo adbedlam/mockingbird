@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import TypedDict
+from typing import Any, TypedDict
 
 
 class Role(StrEnum):
@@ -10,4 +10,4 @@ class Role(StrEnum):
 
 class Message(TypedDict):
     role: Role
-    content: str
+    content: Any

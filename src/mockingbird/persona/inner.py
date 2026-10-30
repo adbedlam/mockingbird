@@ -1,16 +1,13 @@
-from mockingbird.config import load_config
 from mockingbird.conversation.history import History
 from mockingbird.llm.client import LLM
 from mockingbird.llm.message import Message, Role
 from mockingbird.persona.prompts.inner import INNER_PROMPT_COMPONENTS
 
 
-def build_inner_prompt(history: History, model: LLM, temperature: float = 0.5) -> str:
-    config = load_config()
-
+def build_inner_prompt(user: str, other: str, history: History, model: LLM) -> str:
     prompt = "\n\n".join(INNER_PROMPT_COMPONENTS).format(
-        user=config["user"],
-        other=config["other"],
+        user=user,
+        other=other,
     )
 
     messages: list[Message] = [
@@ -18,6 +15,6 @@ def build_inner_prompt(history: History, model: LLM, temperature: float = 0.5) -
         Message(role=Role.USER, content=history.to_samples()),
     ]
 
-    personality = model.complete(messages, temperature)
+    personality = model.complete(messages)
 
     return personality
