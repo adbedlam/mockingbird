@@ -1,5 +1,4 @@
-import os
-from typing import Any, cast
+from typing import cast
 
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
@@ -13,31 +12,33 @@ class LLM:
         host: str,
         model: str,
         api_key: str | None = None,
+        temperature: float = 0.5,
     ) -> None:
         self.model = model
-        key = api_key or os.getenv("LLM_API_KEY")
-        if key is None and not host.startswith(
+
+        api_key = api_key
+
+        if api_key is None and not host.startswith(
             ("http://localhost", "http://127.0.0.1")
         ):
             raise ValueError(
-                f"Host {host!r} looks remote but no API key was given "
-                "(pass api_key= or set LLM_API_KEY)."
+                f"Host {host!r} looks remote but no API key was given, set LLM_API_KEY."
             )
-        self._client = OpenAI(
+
+        self.client = OpenAI(
             base_url=host,
-            api_key=api_key or os.getenv("LLM_API_KEY") or "not-needed",
+            api_key=api_key or "not-needed",
         )
+
+        self.temperature = temperature
 
     def complete(
         self,
         messages: list[Message],
-        temperature: float = 0.0,
-        **kwargs: Any,
     ) -> str:
-        response = self._client.chat.completions.create(
+        response = self.client.chat.completions.create(
             model=self.model,
             messages=cast(list[ChatCompletionMessageParam], messages),
-            temperature=temperature,
-            **kwargs,
+            temperature=self.temperature,
         )
         return response.choices[0].message.content or ""

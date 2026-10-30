@@ -5,8 +5,10 @@ from pathlib import Path
 from mockingbird.config import load_config
 from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message
+from mockingbird.llm.client import LLM
 from mockingbird.mockingbird import Mockingbird
 from mockingbird.preprocessing.factory import make_processor
+from mockingbird.preprocessing.vision import VisionModel
 
 
 def main() -> None:
@@ -16,29 +18,48 @@ def main() -> None:
     user = config["user"]
     other = config["other"]
 
-    raw_file: Path = config["paths"]["raw"] / filename
+    data_dir: Path = config["paths"]["raw"] / filename
 
-    processor = make_processor(config["messenger"])
+    vision_config = config["vision_model"]
+    vision_model = VisionModel(
+        vision_config["host"],
+        vision_config["model"],
+        vision_config["api_key"],
+        vision_config["temperature"],
+    )
+    evaluation_config = config["evaluation"]
+    processor = make_processor(evaluation_config["messenger"], vision_model)
 
-    history = processor.process(raw_file, user, other)
+    history = processor.process(
+        user,
+        other,
+        data_dir,
+        evaluation_config["message_start"],
+        evaluation_config["message_end"],
+    )
 
-    message_config = config["message_selection"]
-    message_start = message_config["evaluation_start"]
-    message_end = message_start + message_config["evaluation_num"]
+    sequences = find_sequences(history, user, other, evaluation_config["window_size"])
 
-    history.messages = history.messages[message_start:message_end]
+    inference_config = config["inference_model"]
+    model = LLM(
+        inference_config["host"],
+        inference_config["model"],
+        inference_config["api_key"],
+        inference_config["temperature"],
+    )
 
-    window_size = message_config["evaluation_window"]
-    sequences = find_sequences(history, user, other, window_size)
+    processed_dir = config["paths"]["processed"] / f"{user}_{other}".replace(" ", "_")
+    processed_dir.mkdir(parents=True, exist_ok=True)
+    output_path: Path = processed_dir / "evaluation.txt"
 
-    processed_path: Path = config["paths"]["processed"]
-    processed_path = processed_path / f"{user}_{other}".replace(" ", "_")
-    processed_path.mkdir(parents=True, exist_ok=True)
-    output_path: Path = processed_path / "evaluation.txt"
+    prompt_path = (
+        config["paths"]["processed"]
+        / f"{user}_{other}".replace(" ", "_")
+        / "inner_prompt.txt"
+    )
+    mockingbird = Mockingbird(user, other, model, prompt_path)
 
-    mockingbird = Mockingbird()
-
-    max_predictions = message_config["max_predictions"]
+    max_predictions = evaluation_config["max_predictions"]
 
     with output_path.open("w", encoding="utf-8") as file:
         for sequence in islice(sequences, max_predictions):

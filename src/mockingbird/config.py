@@ -14,7 +14,13 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
 
     config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
-    config.setdefault("llm", {})["api_key"] = os.getenv("LLM_API_KEY")
+    config.setdefault("building_model", {})["api_key"] = os.getenv(
+        "BUILDING_MODEL_API_KEY"
+    )
+    config.setdefault("inference_model", {})["api_key"] = os.getenv(
+        "INFERENCE_MODEL_API_KEY"
+    )
+    config.setdefault("vision_model", {})["api_key"] = os.getenv("VISION_MODEL_API_KEY")
 
     for key, value in config.get("paths", {}).items():
         path = Path(value)
