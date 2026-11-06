@@ -26,6 +26,8 @@ class TelegramProcessor(Processor):
         messages = []
         for message in data["messages"][start:end]:
             author = self._get_author(message)
+            if not author:
+                continue
             timestamp = self._get_timestamp(message)
             text = self._get_text(message)
 
@@ -33,15 +35,13 @@ class TelegramProcessor(Processor):
             picture_path = (
                 data_dir / relative_picture_path if relative_picture_path else None
             )
-            if picture_path:
-                print(picture_path)
+
             picture_description = (
                 self._get_picture_description(picture_path)
                 if picture_path and self.vision_model
                 else None
             )
-            if picture_path:
-                print(f"{picture_description}\n")
+
             if text is None and picture_path is None:
                 continue
 
@@ -57,11 +57,11 @@ class TelegramProcessor(Processor):
 
         return History(user, other, messages)
 
-    def _get_author(self, message: dict) -> str:
+    def _get_author(self, message: dict) -> str | None:
         if "forwarded_from" in message:
             author = message["forwarded_from"]
         else:
-            author = message["from"]
+            author = message.get("from")
 
         return author
 

@@ -10,8 +10,11 @@ requires-python = ">=3.13"
 dependencies = [
     "emoji>=2.16.0",
     "httpx>=0.28.1",
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.3",
     "openai>=3.14.1",
     "python-dotenv>=1.2.4",
+    "scipy>=1.18.1",
 ]
 
 [project.scripts]
@@ -26,6 +29,7 @@ dev = [
     "black>=26.5.1",
     "isort>=9.0.1",
     "mypy>=2.3.1",
+    "numpy>=2.5.3",
     "pandas-stubs>=3.0.5.260914",
     "pre-commit>=4.3.0",
     "pytest>=9.1.1",

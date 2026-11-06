@@ -35,23 +35,3 @@ class VisionModel:
                 Message(role=Role.USER, content=content),
             ]
         )
-
-
-def main() -> None:
-    from mockingbird.config import load_config
-
-    config = load_config()["vision_model"]
-
-    vision = VisionModel(
-        config["host"],
-        config["model"],
-        config["api_key"],
-        config["temperature"],
-    )
-
-    image_path = Path(__file__).with_name("image.png")
-    print(vision.describe(image_path))
-
-
-if __name__ == "__main__":
-    main()

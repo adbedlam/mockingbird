@@ -1,6 +1,6 @@
 user: Иван Исаев
 
-other: Nikita Yaneev
+other: Nikita
 
 building_model:
   host: https://openrouter.ai/api/v1
@@ -24,9 +24,13 @@ preprocessing:
 
 evaluation:
   message_start: 7000
-  message_end: 1500
+  message_end: 8500
   window_size: 15
   max_predictions: 30
+
+temporial:
+  message_start: 6000
+  message_end: 8500
 
 paths:
   raw: data/raw
