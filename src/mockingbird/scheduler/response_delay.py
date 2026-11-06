@@ -4,7 +4,7 @@ from datetime import timedelta
 import numpy as np
 
 from mockingbird.conversation.history import History
-from mockingbird.temporal.distribution import Distribution
+from mockingbird.scheduler.distribution import Distribution
 
 
 class ResponseDelay:
@@ -23,7 +23,7 @@ class ResponseDelay:
         self.distribution = self._build_distribution()
 
     def _get_delays(self, history: History) -> list[timedelta]:
-        messages = sorted(history.messages, key=lambda m: m.timestamp)
+        messages = sorted(history.messages, key=lambda message: message.timestamp)
 
         delays = []
         last_other_message = None

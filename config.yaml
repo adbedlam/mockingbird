@@ -1,6 +1,6 @@
 user: Иван Исаев
 
-other: Nikita
+other: Nikita Yaneev
 
 building_model:
   host: https://openrouter.ai/api/v1
@@ -31,6 +31,31 @@ evaluation:
 temporial:
   message_start: 6000
   message_end: 8500
+
+messaging_harness:
+  conversation_window: 600
+  busy:
+    bin_size: 900
+    max_duration: 10800
+    randomness_interval: 1800
+  burst:
+    window: 600
+    delay_bin_size: 1
+    smoothing_sigma: 2
+  response_delay:
+    window: 600
+    bin_size: 1
+    smoothing_sigma: 2
+  initiation:
+    bin_size: 900
+    smoothing_sigma: 900
+  sleep:
+    bin_size: 900
+    lower_percentile: 0.80
+    upper_percentile: 0.95
+    start_skew: [2, 5]
+    end_skew: [2, 5]
+    randomness_interval: 1800
 
 paths:
   raw: data/raw

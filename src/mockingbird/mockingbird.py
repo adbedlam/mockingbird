@@ -34,7 +34,7 @@ class Mockingbird:
         ]
         self.conversation_history.extend(conversation_piece)
 
-    def kill(self) -> None:
+    def starve(self) -> None:
         self.conversation_history = [
             message
             for message in self.conversation_history

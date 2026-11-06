@@ -3,17 +3,17 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta
 
 from mockingbird.conversation.history import History
-from mockingbird.temporal.distribution import Distribution
-from mockingbird.temporal.weekday import Weekday
+from mockingbird.scheduler.distribution import Distribution
+from mockingbird.scheduler.weekday import Weekday
 
 
 class Busy:
     def __init__(
         self,
         history: History,
-        bin_size: timedelta,
-        conversation_window: timedelta,
-        max_busy_duration: timedelta = timedelta(hours=12),
+        bin_size: timedelta = timedelta(minutes=15),
+        conversation_window: timedelta = timedelta(minutes=10),
+        max_busy_duration: timedelta = timedelta(hours=3),
         randomness_interval: timedelta = timedelta(minutes=30),
     ):
         self.bin_size = bin_size

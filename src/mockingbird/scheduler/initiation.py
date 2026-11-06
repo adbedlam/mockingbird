@@ -5,19 +5,21 @@ from datetime import datetime, time, timedelta
 import numpy as np
 
 from mockingbird.conversation.history import History
-from mockingbird.temporal.distribution import Distribution
-from mockingbird.temporal.weekday import Weekday
+from mockingbird.scheduler.distribution import Distribution
+from mockingbird.scheduler.weekday import Weekday
 
 
 class Initiation:
     def __init__(
         self,
         history: History,
-        bin_size: timedelta,
-        conversation_window: timedelta,
+        bin_size: timedelta = timedelta(minutes=15),
+        conversation_window: timedelta = timedelta(minutes=30),
+        smoothing_sigma: timedelta = timedelta(minutes=15),
     ) -> None:
         self.bin_size = bin_size
         self.conversation_window = conversation_window
+        self.smoothing_sigma = smoothing_sigma
 
         initial_times = self._get_initial_times(history)
 
@@ -107,8 +109,7 @@ class Initiation:
                 bin_index = int(timedelta(minutes=minute) / self.bin_size)
                 distributions[day][bin_index] += 1
 
-        # Circular Gaussian smoothing.
-        sigma = timedelta(minutes=15).total_seconds() / bin_seconds
+        sigma = self.smoothing_sigma.total_seconds() / bin_seconds
         indices = np.arange(bins)
         distances = np.minimum(indices, bins - indices)
 

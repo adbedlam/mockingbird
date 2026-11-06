@@ -1,15 +1,15 @@
 import random
 from datetime import datetime, time, timedelta
 
-from mockingbird.temporal.distribution import Distribution
-from mockingbird.temporal.weekday import Weekday
+from mockingbird.scheduler.distribution import Distribution
+from mockingbird.scheduler.weekday import Weekday
 
 
 class Sleep:
     def __init__(
         self,
         initiation_distributions: dict[Weekday, Distribution],
-        bin_size: timedelta,
+        bin_size: timedelta = timedelta(minutes=15),
         lower_percentile: float = 0.80,
         upper_percentile: float = 0.99,
         start_skew: tuple[float, float] = (2, 5),

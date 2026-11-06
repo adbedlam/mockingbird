@@ -76,7 +76,7 @@ def main() -> None:
             file.write("mockingbird: ")
             file.write(mockingbird.chirp() + "\n\n")
 
-            mockingbird.kill()
+            mockingbird.starve()
 
 
 def find_sequences(

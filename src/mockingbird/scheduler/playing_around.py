@@ -6,10 +6,10 @@ import matplotlib.pyplot as plt
 from mockingbird.config import load_config
 from mockingbird.conversation.history import History
 from mockingbird.preprocessing.factory import make_processor
-from mockingbird.temporal.busy import Busy
-from mockingbird.temporal.initiation import Initiation
-from mockingbird.temporal.sleep import Sleep
-from mockingbird.temporal.weekday import Weekday
+from mockingbird.scheduler.busy import Busy
+from mockingbird.scheduler.initiation import Initiation
+from mockingbird.scheduler.sleep import Sleep
+from mockingbird.scheduler.weekday import Weekday
 
 
 def format_time(value):
@@ -64,7 +64,7 @@ def main():
         user,
         other,
         config["paths"]["raw"],
-        1000,
+        6000,
         12000,
     )
 
@@ -89,10 +89,10 @@ def main():
         initiation.time_distribution,
         bin_size,
         lower_percentile=0.80,
-        upper_percentile=0.99,
+        upper_percentile=0.95,
     )
 
-    visualize(initiation, busy, sleep)
+    visualize(initiation, busy, sleep, samples=1)
 
 
 if __name__ == "__main__":

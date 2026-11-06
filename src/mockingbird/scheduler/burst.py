@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import numpy as np
 
 from mockingbird.conversation.history import History
-from mockingbird.temporal.distribution import Distribution
+from mockingbird.scheduler.distribution import Distribution
 
 
 class Burst:
