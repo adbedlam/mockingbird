@@ -30,8 +30,8 @@ class Burst:
     ) -> list[list[datetime]]:
         messages = sorted(history.messages, key=lambda m: m.timestamp)
 
-        bursts = []
-        current = []
+        bursts: list[list[datetime]] = []
+        current: list[datetime] = []
 
         for message in messages:
             if message.author != history.user:

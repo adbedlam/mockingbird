@@ -90,17 +90,19 @@ class Sleep:
         large_start, large_end = self.large_intervals[weekday]
         small_start, small_end = self.small_intervals[weekday]
 
-        large_start = datetime.combine(datetime.min, large_start)
-        small_start = datetime.combine(datetime.min, small_start)
-        small_end = datetime.combine(datetime.min, small_end)
-        large_end = datetime.combine(datetime.min, large_end)
+        large_start_time = datetime.combine(datetime.min, large_start)
+        small_start_time = datetime.combine(datetime.min, small_start)
+        small_end_time = datetime.combine(datetime.min, small_end)
+        large_end_time = datetime.combine(datetime.min, large_end)
 
-        start_gap = small_start - large_start
-        end_gap = large_end - small_end
+        start_gap = small_start_time - large_start_time
+        end_gap = large_end_time - small_end_time
 
-        start = (large_start + self._sample_offset(start_gap, self.start_skew)).time()
+        start = (
+            large_start_time + self._sample_offset(start_gap, self.start_skew)
+        ).time()
 
-        end = (small_end + self._sample_offset(end_gap, self.end_skew)).time()
+        end = (small_end_time + self._sample_offset(end_gap, self.end_skew)).time()
 
         start = self._add_randomness(start)
         end = self._add_randomness(end)

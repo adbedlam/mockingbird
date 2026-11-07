@@ -43,8 +43,8 @@ class Busy:
         if not incoming or not user_messages:
             return []
 
-        result = []
-        episodes = []
+        episodes: list[list[datetime]] = []
+        result: list[tuple[datetime, timedelta]] = []
 
         for timestamp in incoming:
             if not episodes or timestamp - episodes[-1][-1] > self.conversation_window:
@@ -95,7 +95,7 @@ class Busy:
         first_date = history.messages[0].timestamp.date()
         last_date = history.messages[-1].timestamp.date()
 
-        counts = defaultdict(Counter)
+        counts: defaultdict[Weekday, Counter[date]] = defaultdict(Counter)
 
         for timestamp, _ in self.unreplied:
             counts[Weekday(timestamp.weekday())][timestamp.date()] += 1
@@ -122,7 +122,9 @@ class Busy:
 
     def _build_time_distribution(self) -> dict[Weekday, Distribution]:
         bins_per_day = int(timedelta(days=1) / self.bin_size)
-        counts = defaultdict(lambda: [0] * bins_per_day)
+        counts: defaultdict[Weekday, list[int]] = defaultdict(
+            lambda: [0] * bins_per_day
+        )
 
         for timestamp, _ in self.unreplied:
             weekday = Weekday(timestamp.weekday())
@@ -151,7 +153,7 @@ class Busy:
         return result
 
     def _build_length_distribution(self) -> dict[Weekday, Distribution]:
-        counts = defaultdict(Counter)
+        counts: defaultdict[Weekday, Counter[int]] = defaultdict(Counter)
 
         for timestamp, duration in self.unreplied:
             weekday = Weekday(timestamp.weekday())

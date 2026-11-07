@@ -8,7 +8,6 @@ from mockingbird.scheduler.response_delay import ResponseDelay
 from mockingbird.scheduler.sleep import Sleep
 
 
-
 class Scheduler:
     def __init__(
         self,
@@ -39,18 +38,18 @@ class Scheduler:
             history,
             bin_size=busy_bin_size,
             conversation_window=conversation_window,
-            max_duration=busy_max_duration,
+            max_busy_duration=busy_max_duration,
             randomness_interval=busy_randomness_interval,
         )
         self.burst = Burst(
             history,
-            window=burst_window,
+            burst_window=burst_window,
             delay_bin_size=burst_delay_bin_size,
             smoothing_sigma=burst_smoothing_sigma,
         )
         self.response_delay = ResponseDelay(
             history,
-            window=response_delay_window,
+            response_window=response_delay_window,
             bin_size=response_delay_bin_size,
             smoothing_sigma=response_delay_smoothing_sigma,
         )

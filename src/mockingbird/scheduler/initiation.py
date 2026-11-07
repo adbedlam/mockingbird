@@ -1,6 +1,6 @@
 import random
 from collections import Counter, defaultdict
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 import numpy as np
 
@@ -30,7 +30,7 @@ class Initiation:
         self,
         history: History,
     ) -> dict[Weekday, list[datetime]]:
-        initial_times = {day: [] for day in Weekday}
+        initial_times: dict[Weekday, list[datetime]] = {day: [] for day in Weekday}
         previous_timestamp = None
 
         for message in history.messages:
@@ -56,7 +56,7 @@ class Initiation:
         if not history.messages:
             return {day: Distribution([], []) for day in Weekday}
 
-        daily_counts = defaultdict(Counter)
+        daily_counts: defaultdict[Weekday, Counter[date]] = defaultdict(Counter)
 
         for day, timestamps in initial_times.items():
             for timestamp in timestamps:
@@ -64,7 +64,7 @@ class Initiation:
 
         dates = [message.timestamp.date() for message in history.messages]
 
-        frequencies = {day: Counter() for day in Weekday}
+        frequencies: dict[Weekday, Counter[int]] = {day: Counter() for day in Weekday}
 
         current_date = min(dates)
         last_date = max(dates)
