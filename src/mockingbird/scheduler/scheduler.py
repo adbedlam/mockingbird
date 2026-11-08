@@ -119,7 +119,7 @@ class Scheduler:
                     type=EventType.SEND_MESSAGE,
                 )
             )
-        
+
             delays = self.burst.generate(weekday)
 
             for delay in delays:
