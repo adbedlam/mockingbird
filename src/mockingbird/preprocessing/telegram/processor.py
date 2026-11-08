@@ -52,6 +52,7 @@ class TelegramProcessor(Processor):
                     picture_description=picture_description,
                     picture_path=picture_path,
                     timestamp=timestamp,
+                    message_id=message.get("id"),
                 )
             )
 

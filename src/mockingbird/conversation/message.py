@@ -10,13 +10,14 @@ class Message:
     text: str | None = None
     picture_description: str | None = None
     picture_path: Path | None = None
+    message_id: str | int | None = None
 
     def to_sample(self):
         author_timestamp = f"{self.author}@{self.timestamp}"
         text = f" | {self.text}" if self.text else ""
-        description = (
-            f" | picture_description: {self.picture_description}"
-            if self.picture_description
-            else ""
-        )
-        return author_timestamp + text + description
+        picture = ""
+        if self.picture_description:
+            picture = f" | picture_description: {self.picture_description}"
+        elif self.picture_path:
+            picture = " | picture attached"
+        return author_timestamp + text + picture
