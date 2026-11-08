@@ -1,6 +1,8 @@
-from datetime import timedelta
+import heapq
+from datetime import datetime, timedelta
 
 from mockingbird.conversation.history import History
+from mockingbird.event import Event, EventType
 from mockingbird.scheduler.burst import Burst
 from mockingbird.scheduler.busy import Busy
 from mockingbird.scheduler.initiation import Initiation
@@ -31,9 +33,6 @@ class Scheduler:
         sleep_end_skew: tuple[float, float] = (2, 5),
         sleep_randomness_interval: timedelta = timedelta(minutes=30),
     ) -> None:
-        self.available: bool = False
-        self.in_conversation: bool = False
-
         self.busy = Busy(
             history,
             bin_size=busy_bin_size,
@@ -68,3 +67,70 @@ class Scheduler:
             end_skew=sleep_end_skew,
             randomness_interval=sleep_randomness_interval,
         )
+
+        self.queue: list[Event] = []
+
+    def generate_schedule(self):
+        self.queue.clear()
+
+        signals: list[Event] = []
+
+        today = datetime.now().date()
+        weekday = today.weekday()
+
+        busy_intervals = self.busy.generate(weekday)
+
+        for start, end in busy_intervals:
+            signals.append(
+                Event(
+                    timestamp=datetime.combine(today, start),
+                    type=EventType.BECOME_BUSY,
+                )
+            )
+
+            signals.append(
+                Event(
+                    timestamp=datetime.combine(today, end),
+                    type=EventType.BECOME_AVAILABLE,
+                )
+            )
+
+        wake_time, sleep_time = self.sleep.generate(weekday)
+
+        signals.append(
+            Event(timestamp=datetime.combine(today, wake_time), type=EventType.WAKE_UP)
+        )
+
+        signals.append(
+            Event(
+                timestamp=datetime.combine(today, sleep_time),
+                type=EventType.GO_TO_SLEEP,
+            )
+        )
+
+        initiations = self.initiation.generate(weekday)
+
+        for initiation in initiations:
+            message_time = datetime.combine(today, initiation)
+
+            signals.append(
+                Event(
+                    timestamp=message_time,
+                    type=EventType.SEND_MESSAGE,
+                )
+            )
+        
+            delays = self.burst.generate(weekday)
+
+            for delay in delays:
+                message_time += delay
+
+                signals.append(
+                    Event(
+                        timestamp=message_time,
+                        type=EventType.SEND_MESSAGE,
+                    )
+                )
+
+        for signal in signals:
+            heapq.heappush(self.queue, signal)

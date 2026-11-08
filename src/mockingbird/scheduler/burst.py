@@ -28,7 +28,7 @@ class Burst:
         self,
         history: History,
     ) -> list[list[datetime]]:
-        messages = sorted(history.messages, key=lambda m: m.timestamp)
+        messages = sorted(history.messages, key=lambda message: message.timestamp)
 
         bursts: list[list[datetime]] = []
         current: list[datetime] = []
@@ -104,9 +104,9 @@ class Burst:
             values,
         )
 
-    def generate(self) -> tuple[int, list[timedelta]]:
+    def generate(self) -> list[timedelta]:
         if not self.bursts:
-            return 0, []
+            return []
 
         size = random.choices(
             self.size_distribution.values,
@@ -120,4 +120,4 @@ class Burst:
             k=size - 1,
         )
 
-        return size, delays
+        return delays

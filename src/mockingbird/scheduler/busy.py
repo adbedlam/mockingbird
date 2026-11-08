@@ -185,7 +185,7 @@ class Busy:
     def generate(
         self,
         weekday: Weekday,
-    ) -> list[tuple[time, timedelta]]:
+    ) -> list[tuple[time, time]]:
         count = random.choices(
             self.count_distribution[weekday].values,
             weights=self.count_distribution[weekday].probabilities,
@@ -210,15 +210,17 @@ class Busy:
             offset = bin_index * self.bin_size
             jitter = random.uniform(0, self.bin_size.total_seconds())
 
-            start = (
+            start_time = (
                 datetime.combine(date.min, time.min)
                 + offset
                 + timedelta(seconds=jitter)
-            ).time()
+            )
 
             duration = min(duration, self.max_busy_duration)
             duration = self._add_randomness(duration)
 
-            result.append((start, duration))
+            end_time = start_time + duration
+
+            result.append((start_time.time(), end_time.time()))
 
         return sorted(result)

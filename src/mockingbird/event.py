@@ -1,5 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum, auto
+from typing import Any
 
 
 class EventType(Enum):
@@ -9,9 +11,11 @@ class EventType(Enum):
     GO_TO_SLEEP = auto()
     BECOME_BUSY = auto()
     BECOME_AVAILABLE = auto()
+    END_CONVERSATION = auto()
 
 
-@dataclass
+@dataclass(order=True)
 class Event:
-    type: EventType
-    payload: object | None = None
+    timestamp: datetime
+    type: EventType = field(compare=False)
+    payload: Any = field(default=None, compare=False)
