@@ -1,90 +1,68 @@
+import argparse
+import logging
+import sys
 from pathlib import Path
 
-import mockingbird.conversation.message as conversation
-import mockingbird.llm.message as llm
 from mockingbird.config import load_config
-from mockingbird.llm.client import LLM
-from mockingbird.llm.message import Role
-from mockingbird.prompts.imitation import IMITATION
-from mockingbird.prompts.supress_llm_behavior import SUPRESS_LLM_BEHAVIOR
-
-
-class Mockingbird:
-    def __init__(self, user: str, other: str, model: LLM, prompt_path: Path):
-        self.user = user
-        self.other = other
-
-        inner_prompt = prompt_path.read_text(encoding="utf-8")
-        system_prompt = IMITATION + inner_prompt + SUPRESS_LLM_BEHAVIOR
-
-        self.model = model
-
-        self.conversation_history: list[llm.Message] = []
-        self.conversation_history.append(
-            llm.Message(role=Role.SYSTEM, content=system_prompt)
-        )
-
-    def feed(self, messages: list[conversation.Message]) -> None:
-        conversation_piece = [
-            llm.Message(
-                role=(Role.ASSISTANT if message.author == self.user else Role.USER),
-                content=message.text,
-            )
-            for message in messages
-        ]
-        self.conversation_history.extend(conversation_piece)
-
-    def starve(self) -> None:
-        self.conversation_history = [
-            message
-            for message in self.conversation_history
-            if message["role"] == Role.SYSTEM
-        ]
-
-    def sing(self) -> None:
-        while True:
-            user_input = input("user>")
-
-            self.conversation_history.append(
-                llm.Message(role=Role.USER, content=user_input)
-            )
-
-            response = self.model.complete(self.conversation_history)
-
-            self.conversation_history.append(
-                llm.Message(role=Role.ASSISTANT, content=response)
-            )
-
-            print(f"mockingbird>{response}")
-
-    def chirp(self) -> str:
-        return self.model.complete(self.conversation_history)
+from mockingbird.pipeline import Pipeline
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--diary-every",
+        type=int,
+        help="Override the diary threshold, counted in incoming messages, for this run.",
+    )
+    parser.add_argument(
+        "--preview-diary",
+        action="store_true",
+        help="Write this chat to a separate preview diary, not the main diary.",
+    )
+    parser.add_argument(
+        "--preview-name",
+        default="chat-preview",
+        help="Folder name under paths.diary when --preview-diary is enabled.",
+    )
+    args = parser.parse_args()
+    if args.diary_every is not None and args.diary_every < 1:
+        parser.error("--diary-every must be at least 1")
+    if (
+        args.preview_name in {".", ".."}
+        or Path(args.preview_name).name != args.preview_name
+    ):
+        parser.error("--preview-name must be a single folder name")
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)-7s | %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    for stream in (sys.stdin, sys.stdout):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="strict")
     config = load_config()
-
-    user = config["user"]
-
-    other = config["other"]
-
-    inference_config = config["inference_model"]
-    model = LLM(
-        inference_config["host"],
-        inference_config["model"],
-        inference_config["api_key"],
-        inference_config["temperature"],
+    diary_path_root = (
+        config["paths"]["diary"] / args.preview_name if args.preview_diary else None
     )
-
-    prompt_path = (
-        config["paths"]["processed"]
-        / f"{user}_{other}".replace(" ", "_")
-        / "inner_prompt.txt"
+    pipeline = Pipeline.from_config(
+        config,
+        diary_update_every_messages=args.diary_every,
+        diary_path_root=diary_path_root,
+        load_recent_context=True,
     )
+    logging.info("Pipeline is ready. Type Ctrl+C or send EOF to stop.")
 
-    mockingbird = Mockingbird(user, other, model, prompt_path)
+    while True:
+        try:
+            user_input = input("other> ")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            logging.info("Pipeline stopped")
+            break
 
-    mockingbird.sing()
+        response = pipeline.respond_to(user_input)
+        print(f"persona> {response}")
 
 
 if __name__ == "__main__":

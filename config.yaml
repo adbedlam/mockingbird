@@ -1,6 +1,6 @@
-user: Иван Исаев
+user: Nikita
 
-other: Nikita Yaneev
+other: Исаев Фембой
 
 building_model:
   host: https://openrouter.ai/api/v1
@@ -12,6 +12,12 @@ inference_model:
   model: openai/gpt-6-astra
   temperature: 0.7
 
+# inference_model:
+#   host: https://openrouter.ai/api/v1
+#   model: openai/gpt-6-luna
+#   temperature: 0.7
+
+
 vision_model:
   host: http://localhost:1235/v1
   model: qwen3.5-2b
@@ -22,6 +28,12 @@ preprocessing:
   message_end: 500
   messenger: telegram
 
+profile_build:
+  chunk_size: 500
+
+runtime_context:
+  recent_messages: 20
+
 evaluation:
   message_start: 7000
   message_end: 8500
@@ -31,6 +43,9 @@ evaluation:
 temporial:
   message_start: 6000
   message_end: 8500
+
+diary:
+  update_every_messages: 100
 
 messaging_harness:
   conversation_window: 600
@@ -60,3 +75,4 @@ messaging_harness:
 paths:
   raw: data/raw
   processed: data/processed
+  diary: data/diary

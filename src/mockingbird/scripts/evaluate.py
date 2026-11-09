@@ -6,7 +6,7 @@ from mockingbird.config import load_config
 from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message
 from mockingbird.llm.client import LLM
-from mockingbird.mockingbird import Mockingbird
+from mockingbird.pipeline import Pipeline
 from mockingbird.preprocessing.factory import make_processor
 from mockingbird.preprocessing.vision import VisionModel
 
@@ -57,7 +57,12 @@ def main() -> None:
         / f"{user}_{other}".replace(" ", "_")
         / "inner_prompt.txt"
     )
-    mockingbird = Mockingbird(user, other, model, prompt_path)
+    pipeline = Pipeline(
+        user,
+        other,
+        model,
+        prompt_path.read_text(encoding="utf-8"),
+    )
 
     max_predictions = evaluation_config["max_predictions"]
 
@@ -65,7 +70,7 @@ def main() -> None:
         for sequence in islice(sequences, max_predictions):
             file.write("=" * 80 + "\n")
 
-            mockingbird.feed(sequence[:-1])
+            pipeline.feed(sequence[:-1])
 
             for message in sequence[:-1]:
                 file.write(f"{message.author}: {message.text}\n")
@@ -74,9 +79,9 @@ def main() -> None:
             file.write(f"{sequence[-1].text}\n")
 
             file.write("mockingbird: ")
-            file.write(mockingbird.chirp() + "\n\n")
+            file.write(pipeline.respond() + "\n\n")
 
-            mockingbird.starve()
+            pipeline.starve()
 
 
 def find_sequences(
