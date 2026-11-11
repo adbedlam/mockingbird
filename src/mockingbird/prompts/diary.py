@@ -1,0 +1,3 @@
+DIARY_PROMPT = """
+
+"""

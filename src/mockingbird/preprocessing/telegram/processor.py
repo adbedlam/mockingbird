@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -6,6 +7,8 @@ from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message
 from mockingbird.preprocessing.processor import Processor
 from mockingbird.preprocessing.vision import VisionModel
+
+logger = logging.getLogger(__name__)
 
 
 class TelegramProcessor(Processor):
@@ -20,14 +23,35 @@ class TelegramProcessor(Processor):
         start: int = 0,
         end: int | None = None,
     ) -> History:
+        logger.info("Loading Telegram export from %s", data_dir / "result.json")
+
         with (data_dir / "result.json").open("r", encoding="utf-8") as file:
             data: dict = json.load(file)
 
+        all_messages = data["messages"]
+        selected_messages = all_messages[start:end]
+
+        logger.info(
+            "Found %d messages in export. Processing messages [%d:%s] (%d selected).",
+            len(all_messages),
+            start,
+            end,
+            len(selected_messages),
+        )
+
         messages = []
-        for message in data["messages"][start:end]:
+        pictures_found = 0
+        pictures_processed = 0
+        skipped = 0
+
+        for index, message in enumerate(selected_messages, start=1):
             author = self._get_author(message)
+
             if not author:
+                skipped += 1
+                logger.debug("Skipping message %d: no author", index)
                 continue
+
             timestamp = self._get_timestamp(message)
             text = self._get_text(message)
 
@@ -36,13 +60,32 @@ class TelegramProcessor(Processor):
                 data_dir / relative_picture_path if relative_picture_path else None
             )
 
-            picture_description = (
-                self._get_picture_description(picture_path)
-                if picture_path and self.vision_model
-                else None
-            )
+            picture_description = None
+
+            if picture_path:
+                pictures_found += 1
+
+                if self.vision_model:
+                    pictures_processed += 1
+                    logger.info(
+                        "Processing picture %d: %s",
+                        pictures_processed,
+                        picture_path,
+                    )
+
+                    try:
+                        picture_description = self._get_picture_description(
+                            picture_path
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Failed to process picture: %s",
+                            picture_path,
+                        )
 
             if text is None and picture_path is None:
+                skipped += 1
+                logger.debug("Skipping message %d: empty message", index)
                 continue
 
             messages.append(
@@ -55,6 +98,37 @@ class TelegramProcessor(Processor):
                     message_id=message.get("id"),
                 )
             )
+
+            logger.debug(
+                "Processed message %d/%d: author=%s, timestamp=%s, "
+                "text=%s, picture=%s",
+                index,
+                len(selected_messages),
+                author,
+                timestamp,
+                text is not None,
+                picture_path is not None,
+            )
+
+            if index % 100 == 0:
+                logger.info(
+                    "Progress: %d/%d messages processed, %d pictures found, "
+                    "%d pictures processed.",
+                    index,
+                    len(selected_messages),
+                    pictures_found,
+                    pictures_processed,
+                )
+
+        logger.info(
+            "Telegram processing complete: "
+            "%d messages retained, %d skipped, "
+            "%d pictures found, %d pictures processed.",
+            len(messages),
+            skipped,
+            pictures_found,
+            pictures_processed,
+        )
 
         return History(user, other, messages)
 

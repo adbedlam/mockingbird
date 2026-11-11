@@ -1,53 +1,37 @@
 user: Nikita
-
 other: Исаев Фембой
+
+mockingbird:
+  diary_last_n: 30
+  history_last_n: 100
 
 building_model:
   host: https://openrouter.ai/api/v1
-  model: openai/gpt-6-astra
+  model: openai/gpt-6-luna
   temperature: 0.3
 
 inference_model:
   host: https://openrouter.ai/api/v1
-  model: openai/gpt-6-astra
+  model: openai/gpt-6-luna
   temperature: 0.7
-
-# inference_model:
-#   host: https://openrouter.ai/api/v1
-#   model: openai/gpt-6-luna
-#   temperature: 0.7
-
 
 vision_model:
   host: http://localhost:1235/v1
   model: qwen3.5-2b
   temperature: 0.1
+  enabled: true
 
 preprocessing:
   message_start: 0
   message_end: 500
   messenger: telegram
 
-profile_build:
-  chunk_size: 500
-
-runtime_context:
-  recent_messages: 20
-
-evaluation:
-  message_start: 7000
-  message_end: 8500
-  window_size: 15
-  max_predictions: 30
-
-temporial:
-  message_start: 6000
-  message_end: 8500
-
 diary:
-  update_every_messages: 100
+  first_n: 1000
+  batch_size: 200
+  update_in: 200
 
-messaging_harness:
+scheduler:
   conversation_window: 600
   busy:
     bin_size: 900
@@ -75,4 +59,3 @@ messaging_harness:
 paths:
   raw: data/raw
   processed: data/processed
-  diary: data/diary

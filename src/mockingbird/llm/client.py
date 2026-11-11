@@ -1,9 +1,12 @@
+import logging
 from typing import cast
 
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
 from mockingbird.llm.message import Message
+
+logger = logging.getLogger(__name__)
 
 
 class LLM:
@@ -32,13 +35,36 @@ class LLM:
 
         self.temperature = temperature
 
-    def complete(
-        self,
-        messages: list[Message],
-    ) -> str:
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=cast(list[ChatCompletionMessageParam], messages),
-            temperature=self.temperature,
+        logger.debug(
+            "Initialized LLM: model=%s, host=%s, temperature=%s",
+            model,
+            host,
+            temperature,
         )
-        return response.choices[0].message.content or ""
+
+    def complete(self, messages: list[Message]) -> str:
+        logger.debug("Sending completion request: model=%s", self.model)
+        logger.debug("Request messages (%d): %s", len(messages), messages)
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=cast(list[ChatCompletionMessageParam], messages),
+                temperature=self.temperature,
+            )
+
+            content = response.choices[0].message.content or ""
+
+            logger.debug(
+                "Completion received: model=%s, tokens=%s, finish_reason=%s",
+                response.model,
+                response.usage,
+                response.choices[0].finish_reason,
+            )
+            logger.debug("Response content: %s", content)
+
+            return content
+
+        except Exception:
+            logger.exception("LLM completion request failed")
+            raise

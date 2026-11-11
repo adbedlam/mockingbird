@@ -1,13 +1,14 @@
+import asyncio
 import heapq
 from datetime import datetime, timedelta
 
 from mockingbird.conversation.history import History
 from mockingbird.event import Event, EventType
-from mockingbird.scheduler.burst import Burst
-from mockingbird.scheduler.busy import Busy
-from mockingbird.scheduler.initiation import Initiation
-from mockingbird.scheduler.response_delay import ResponseDelay
-from mockingbird.scheduler.sleep import Sleep
+from mockingbird.scheduler.statistics.burst import Burst
+from mockingbird.scheduler.statistics.busy import Busy
+from mockingbird.scheduler.statistics.initiation import Initiation
+from mockingbird.scheduler.statistics.response_delay import ResponseDelay
+from mockingbird.scheduler.statistics.sleep import Sleep
 
 
 class Scheduler:
@@ -134,3 +135,21 @@ class Scheduler:
 
         for signal in signals:
             heapq.heappush(self.queue, signal)
+
+
+    async def run(self):
+        while self.queue:
+            event = self.queue[0]
+
+            delay = (event.timestamp - datetime.now()).total_seconds()
+
+            if delay > 0:
+                await asyncio.sleep(delay)
+
+            yield heapq.heappop(self.queue)
+
+    def get_burst(self) -> list[timedelta]:
+        today = datetime.now().date()
+        weekday = today.weekday()
+
+        return self.burst.generate(weekday)
