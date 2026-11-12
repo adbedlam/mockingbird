@@ -1,13 +1,12 @@
 import asyncio
 import logging
-from pathlib import Path
 from datetime import timedelta
+from pathlib import Path
 
 import mockingbird.conversation.message as conversation
 import mockingbird.llm.message as llm
 from mockingbird.config import load_config
 from mockingbird.conversation.history import History
-from mockingbird.interface.cli import CLIInterface
 from mockingbird.llm.client import LLM
 from mockingbird.llm.message import Role
 from mockingbird.mockingbird.event import Event, EventType
@@ -27,37 +26,13 @@ class Mockingbird:
         paths = config["paths"]
         processed_path = Path(paths["processed"])
 
-        self.diary = Diary.load(
-            processed_path / paths["diary_filename"]
+        self.diary = Diary.load(processed_path / paths["diary_filename"])
+
+        self.history = History.load(processed_path / paths["history_filename"])
+
+        self.inner_prompt = InnerPrompt.load(
+            processed_path / paths["inner_prompt_filename"]
         )
-
-        self.history = History.load(
-            processed_path / paths["history_filename"]
-        )
-
-    async def sing(self) -> None:
-        scheduler_iter = self.scheduler.run().__aiter__()
-
-        scheduler_task = asyncio.create_task(anext(scheduler_iter))
-        interface_task = asyncio.create_task(self.interface.receive_event())
-
-        while True:
-            done, _ = await asyncio.wait(
-                [scheduler_task, interface_task],
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-
-            if scheduler_task in done:
-                event = scheduler_task.result()
-                await self._handle_event(event)
-
-                scheduler_task = asyncio.create_task(anext(scheduler_iter))
-
-            if interface_task in done:
-                event = interface_task.result()
-                await self._handle_event(event)
-
-                interface_task = asyncio.create_task(self.interface.receive_event())
 
     async def _handle_event(self, event: Event) -> None:
         match event.type:
@@ -93,7 +68,9 @@ class Mockingbird:
         self.context: list[llm.Message] = []
 
         inner_prompt_context: list[llm.Message] = [
-            llm.Message(role=Role.SYSTEM, content=IMITATION.format(user=self.user)),
+            llm.Message(
+                role=Role.SYSTEM, content=IMITATION.format(user=self.history.user)
+            ),
             self.inner_prompt.to_llm_message(),
         ]
 
@@ -105,19 +82,18 @@ class Mockingbird:
 
         self.context.append(supress_llm_behavior_context)
 
-        diary_context: list[llm.Message] = [
-            llm.Message(role=Role.SYSTEM, content=DIARY_PROMPT),
-            self.diary.last_n(self.diary_last_n),
-        ]
+        # diary_context: list[llm.Message] = [
+        #     llm.Message(role=Role.SYSTEM, content=DIARY_PROMPT),
+        #     self.diary.last_n(self.diary_last_n),
+        # ]
 
-        self.context.extend(diary_context)
+        # self.context.extend(diary_context)
 
-        history_context = self.history.to_llm_messages(self.history_last_n)
+        history_context = self.history.to_llm_messages(self.history.user, 100)
 
         self.context.extend(history_context)
 
     def _go_to_sleep(self) -> None:
-        self.scheduler.generate_schedule()
         print("mockingbird went to sleep")
 
     def _become_busy(self) -> None:

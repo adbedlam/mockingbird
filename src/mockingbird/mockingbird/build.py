@@ -84,6 +84,7 @@ def _build_diary(config: dict, history: History) -> Diary:
         batch_size=diary_config["batch_size"],
     )
 
+
 def build() -> None:
     parser = argparse.ArgumentParser(
         description="Build Mockingbird artifacts. No args to run the entire pipeline, args to run selected."
