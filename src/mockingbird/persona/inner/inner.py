@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 from mockingbird.conversation.history import History
 from mockingbird.llm.client import LLM
@@ -49,5 +50,16 @@ class InnerPrompt:
     def to_llm_message(self) -> Message:
         return Message(role=Role.SYSTEM, content=self.content)
 
-    # def update(...) -> None:
-    # unsure if needed
+    def save(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(self.content, encoding="utf-8")
+
+        logger.info("Inner prompt saved to %s", path)
+
+    @classmethod
+    def load(cls, path: Path) -> InnerPrompt:
+        content = path.read_text(encoding="utf-8")
+
+        logger.info("Inner prompt loaded from %s (%d characters)", path, len(content))
+
+        return cls(content=content)

@@ -5,6 +5,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 
 from mockingbird.conversation import message as conversation
 from mockingbird.conversation.history import History
@@ -20,12 +21,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Diary:
-    user: str
-    model: LLM
-    update_in: int
     entries: list[Entry] = field(default_factory=list)
-    pending_messages: list[conversation.Message] = field(default_factory=list)
-    diary_updated: bool = False
 
     @classmethod
     def from_history(
@@ -34,7 +30,6 @@ class Diary:
         history: History,
         first_n=2000,
         batch_size: int = 500,
-        update_in: int = 200,
     ) -> Diary:
         if first_n < 1:
             raise ValueError("first_n must be positive")
@@ -50,7 +45,7 @@ class Diary:
 
         if not messages:
             logger.warning("Cannot generate diary: conversation history is empty")
-            return cls(user=history.user, model=model, update_in=update_in)
+            return cls()
 
         first_batch = messages[:first_n]
 
@@ -76,11 +71,7 @@ class Diary:
         )
 
         diary = cls(
-            user=history.user,
             entries=cls._parse_entries(raw_entries),
-            model=model,
-            pending_messages=[],
-            update_in=update_in,
         )
 
         logger.info(
@@ -99,7 +90,7 @@ class Diary:
             )
 
             previous_count = len(diary.entries)
-            diary._update(batch)
+            diary.update(history.user, model, batch)
 
             logger.info(
                 "Diary updated: +%d entries (%d total)",
@@ -166,7 +157,9 @@ class Diary:
             f"{entry.timestamp.isoformat()} | {entry.content}" for entry in self.entries
         )
 
-    def _update(self, new_messages: list[conversation.Message]) -> None:
+    def update(
+        self, user: str, model: LLM, new_messages: list[conversation.Message]
+    ) -> None:
         if not new_messages:
             logger.debug("Skipping diary update: no new messages")
             return
@@ -181,12 +174,12 @@ class Diary:
 
         existing_diary = str(self)
 
-        raw_entries = self.model.complete(
+        raw_entries = model.complete(
             [
                 llm.Message(
                     role=Role.SYSTEM,
                     content=DIARY_UPDATE.format(
-                        user=self.user,
+                        user=user,
                     ),
                 ),
                 llm.Message(
@@ -211,84 +204,37 @@ class Diary:
 
         self.diary_updated = True
 
-    def append_message(self, message: conversation.Message) -> None:
-        self.pending_messages.append(message)
+    def save(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
 
-        if (len(self.pending_messages)) >= self.update_in:
-            self._update(self.pending_messages)
-            self.pending_messages.clear()
+        data = [
+            {
+                "timestamp": entry.timestamp.isoformat(),
+                "content": entry.content,
+            }
+            for entry in self.entries
+        ]
 
-    def last_n(self, last_n: int) -> list[Entry]:
-        return self.entries[-last_n:]
-
-    def check_diary(self) -> bool:
-        return self.diary_updated
-
-    def diary_read(self) -> None:
-        self.diary_updated = False
-
-def main():
-    logging.basicConfig(level=logging.INFO)
-    from mockingbird.config import load_config
-
-    config = load_config()
-
-    user = config["user"]
-    other = config["other"]
-    vision_config = config["vision_model"]
-    from mockingbird.preprocessing.vision import VisionModel
-
-    vision_model = (
-        VisionModel(
-            vision_config["host"],
-            vision_config["model"],
-            vision_config["api_key"],
-            vision_config["temperature"],
+        path.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
         )
-        if vision_config["enabled"]
-        else None
-    )
-    from mockingbird.preprocessing.factory import make_processor
+        logger.info("Diary saved to %s (%d entries)", path, len(self.entries))
 
-    processor = make_processor(
-        config["preprocessing"]["messenger"],
-        vision_model=vision_model,
-    )
+    @classmethod
+    def load(
+        cls,
+        path: Path,
+    ) -> Diary:
+        data = json.loads(path.read_text(encoding="utf-8"))
 
-    history: History = processor.process(
-        user,
-        other,
-        config["paths"]["raw"],
-        0,
-        1100,
-    )
+        entries = [
+            Entry(
+                timestamp=datetime.fromisoformat(item["timestamp"]),
+                content=item["content"],
+            )
+            for item in data
+        ]
 
-    building_config = config["building_model"]
-    model = LLM(
-        building_config["host"], building_config["model"], building_config["api_key"]
-    )
-    diary = Diary.from_history(
-        model,
-        history=History(
-            user=history.user,
-            other=history.other,
-            messages=history.messages[:1000],
-        ),
-        first_n=500,
-        batch_size=100,
-        update_in=100,
-    )
-    with open("diary_1.txt", "w", encoding="utf-8") as f:
-        f.write(str(diary))
+        logger.info("Diary loaded from %s (%d entries)", path, len(entries))
 
-    diary._update(history.messages[1000:1100])
-
-    with open("history.txt", "w", encoding="utf-8") as f:
-        f.write(history.to_samples())
-
-    with open("diary_2.txt", "w", encoding="utf-8") as f:
-        f.write(str(diary))
-
-
-if __name__ == "__main__":
-    main()
+        return cls(entries=entries)

@@ -1,5 +1,5 @@
-user: Nikita
-other: Исаев Фембой
+user: Иван Исаев
+other: Nikita
 
 mockingbird:
   diary_last_n: 30
@@ -19,11 +19,11 @@ vision_model:
   host: http://localhost:1235/v1
   model: qwen3.5-2b
   temperature: 0.1
-  enabled: true
+  enabled: false
 
 preprocessing:
-  message_start: 0
-  message_end: 500
+  message_start: 6000
+  message_end: 12000
   messenger: telegram
 
 diary:
@@ -50,7 +50,7 @@ scheduler:
     smoothing_sigma: 900
   sleep:
     bin_size: 900
-    lower_percentile: 0.80
+    lower_percentile: 0.7
     upper_percentile: 0.95
     start_skew: [2, 5]
     end_skew: [2, 5]
@@ -59,3 +59,6 @@ scheduler:
 paths:
   raw: data/raw
   processed: data/processed
+  history_filename: "history.json"
+  inner_prompt_filename: "inner_prompt.md"
+  diary_filename: "diary.json"

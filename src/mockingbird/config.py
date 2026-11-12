@@ -22,11 +22,11 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
     )
     config.setdefault("vision_model", {})["api_key"] = os.getenv("VISION_MODEL_API_KEY")
 
-    for key, value in config.get("paths", {}).items():
-        path = Path(value)
-        if not path.is_absolute():
-            path = PROJECT_ROOT / path
-        config["paths"][key] = path
+    for key in ("raw", "processed"):
+        value = Path(config["paths"][key])
+        if not value.is_absolute():
+            value = PROJECT_ROOT / value
+        config["paths"][key] = value
 
     return config
 
