@@ -28,6 +28,7 @@ Prioritize:
 8. Preserve contradictions and changes of opinion rather than silently resolving them.
 9. Do not repeat the same information in multiple entries.
 10. Write naturally and concisely, as if {user} were keeping a personal diary.
+11. When a passage combines statements from different dates, name the relevant dates in the passage or split it into separate entries. Do not call them 'that same day' without evidence. Do not expand abbreviated product names or calculate price ratios that the cited messages do not actually establish.
 
 ## Output format
 

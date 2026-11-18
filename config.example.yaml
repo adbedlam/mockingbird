@@ -1,6 +1,15 @@
 user: Modeled Person
 other: Conversation Partner
 
+telegram_business:
+  bot_username: mockingbird_persona_bot
+  pause_on_manual_outgoing: true
+  allowed_chat_ids: []
+
+mockingbird:
+  diary_last_n: 30
+  history_last_n: 100
+
 building_model:
   host: https://openrouter.ai/api/v1
   model: openai/gpt-6-luna
@@ -10,62 +19,64 @@ inference_model:
   host: https://openrouter.ai/api/v1
   model: openai/gpt-6-luna
   temperature: 0.7
+  json_mode: true
 
 vision_model:
   host: http://localhost:1235/v1
   model: qwen3.5-2b
   temperature: 0.1
+  enabled: false
 
 preprocessing:
-  message_start: 0
-  message_end: 500
+  latest_messages: 5000
   messenger: telegram
+  user_id: null
+  other_id: null
 
-profile_build:
-  chunk_size: 500
+persona_build:
+  auto_refresh_on_start: false
+  recent_messages: 1000
+  max_input_chars: 160000
 
 runtime_context:
-  recent_messages: 20
+  archive_max_age_days: 365
+  memory_max_age_days: 365
 
-evaluation:
-  message_start: 7000
-  message_end: 8500
-  window_size: 15
-  max_predictions: 30
-
-temporial:
-  message_start: 6000
-  message_end: 8500
+memory_search:
+  enabled: true
+  recent_entries: 5
+  max_chars: 24000
+  min_score: 0.2
+  max_age_days: null
+  aliases: {}
 
 diary:
-  update_every_messages: 100
+  enabled: true
+  first_n: 1000
+  batch_size: 200
+  update_in: 200
 
-messaging_harness:
+life:
+  enabled: true
+  diary_hour: 23
+
+scheduler:
+  timezone: Europe/Moscow
+  reply_mode: history
+  max_initiations_per_day: 2
+  bin_minutes: 30
+  activity_coverage: 0.9
+  min_weekday_messages: 20
+  min_initiation_gap_seconds: 14400
+  silence_before_initiation_seconds: 2700
   conversation_window: 600
-  busy:
-    bin_size: 900
-    max_duration: 10800
-    randomness_interval: 1800
-  burst:
-    window: 600
-    delay_bin_size: 1
-    smoothing_sigma: 2
-  response_delay:
-    window: 600
-    bin_size: 1
-    smoothing_sigma: 2
-  initiation:
-    bin_size: 900
-    smoothing_sigma: 900
-  sleep:
-    bin_size: 900
-    lower_percentile: 0.80
-    upper_percentile: 0.95
-    start_skew: [2, 5]
-    end_skew: [2, 5]
-    randomness_interval: 1800
+  min_reply_delay_seconds: 5
+  max_reply_delay_seconds: 14400
+  max_lateness_seconds: 1800
 
 paths:
   raw: data/raw
   processed: data/processed
-  diary: data/diary
+  history_filename: history.json
+  inner_prompt_filename: inner_prompt.md
+  diary_filename: diary.json

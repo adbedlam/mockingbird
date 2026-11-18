@@ -16,21 +16,26 @@ class LLM:
         model: str,
         api_key: str | None = None,
         temperature: float = 0.5,
+        *,
+        timeout: float = 120.0,
+        json_mode: bool = False,
     ) -> None:
         self.model = model
+        self.json_mode = json_mode
 
-        api_key = api_key
-
-        if api_key is None and not host.startswith(
+        if not api_key and not host.startswith(
             ("http://localhost", "http://127.0.0.1")
         ):
             raise ValueError(
-                f"Host {host!r} looks remote but no API key was given, set LLM_API_KEY."
+                f"Host {host!r} requires an API key. Set the corresponding "
+                "BUILDING_MODEL_API_KEY, INFERENCE_MODEL_API_KEY or VISION_MODEL_API_KEY."
             )
 
         self.client = OpenAI(
             base_url=host,
             api_key=api_key or "not-needed",
+            timeout=timeout,
+            max_retries=0,
         )
 
         self.temperature = temperature
@@ -44,14 +49,22 @@ class LLM:
 
     def complete(self, messages: list[Message]) -> str:
         logger.debug("Sending completion request: model=%s", self.model)
-        logger.debug("Request messages (%d): %s", len(messages), messages)
+        logger.debug("Request message count: %d", len(messages))
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=cast(list[ChatCompletionMessageParam], messages),
-                temperature=self.temperature,
-            )
+            if self.json_mode:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=cast(list[ChatCompletionMessageParam], messages),
+                    temperature=self.temperature,
+                    response_format={"type": "json_object"},
+                )
+            else:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=cast(list[ChatCompletionMessageParam], messages),
+                    temperature=self.temperature,
+                )
 
             content = response.choices[0].message.content or ""
 
@@ -61,10 +74,10 @@ class LLM:
                 response.usage,
                 response.choices[0].finish_reason,
             )
-            logger.debug("Response content: %s", content)
+            logger.debug("Response length: %d", len(content))
 
             return content
 
-        except Exception:
-            logger.exception("LLM completion request failed")
+        except Exception as exc:
+            logger.warning("LLM completion request failed: %s", type(exc).__name__)
             raise

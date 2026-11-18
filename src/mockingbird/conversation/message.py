@@ -10,7 +10,7 @@ class Message:
     text: str | None = None
     picture_description: str | None = None
     picture_path: Path | None = None
-    message_id: str | None = None
+    message_id: str | int | None = None
 
     def to_sample(self) -> str:
         timestamp = self.timestamp.isoformat()

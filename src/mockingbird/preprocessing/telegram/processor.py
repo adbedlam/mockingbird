@@ -12,8 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramProcessor(Processor):
-    def __init__(self, vision_model: VisionModel | None = None):
+    def __init__(
+        self,
+        vision_model: VisionModel | None = None,
+        author_ids: dict[str, str] | None = None,
+    ):
         self.vision_model = vision_model
+        self.author_ids = author_ids or {}
 
     def process(
         self,
@@ -46,8 +51,14 @@ class TelegramProcessor(Processor):
 
         for index, message in enumerate(selected_messages, start=1):
             author = self._get_author(message)
+            if self.author_ids:
+                author = self.author_ids.get(message.get("from_id"))
 
-            if not author:
+            if (
+                author not in (user, other)
+                or "forwarded_from" in message
+                or message.get("type") == "service"
+            ):
                 skipped += 1
                 logger.debug("Skipping message %d: no author", index)
                 continue
@@ -133,12 +144,7 @@ class TelegramProcessor(Processor):
         return History(user, other, messages)
 
     def _get_author(self, message: dict) -> str | None:
-        if "forwarded_from" in message:
-            author = message["forwarded_from"]
-        else:
-            author = message.get("from")
-
-        return author
+        return message.get("from")
 
     def _get_timestamp(self, message: dict) -> datetime:
         return datetime.fromisoformat(message["date"])

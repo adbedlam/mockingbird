@@ -153,9 +153,7 @@ class Diary:
         return entries
 
     def __str__(self) -> str:
-        return "\n\n".join(
-            f"{entry.timestamp.isoformat()} | {entry.content}" for entry in self.entries
-        )
+        return "\n\n".join(entry.to_string() for entry in self.entries)
 
     def update(
         self, user: str, model: LLM, new_messages: list[conversation.Message]
@@ -211,6 +209,15 @@ class Diary:
             {
                 "timestamp": entry.timestamp.isoformat(),
                 "content": entry.content,
+                "source_ids": entry.source_ids,
+                "memory_id": entry.memory_id,
+                "revision": entry.revision,
+                "state": entry.state,
+                "subject": entry.subject,
+                "topic": entry.topic,
+                "recorded_at": (
+                    entry.recorded_at.isoformat() if entry.recorded_at else None
+                ),
             }
             for entry in self.entries
         ]
@@ -231,6 +238,17 @@ class Diary:
             Entry(
                 timestamp=datetime.fromisoformat(item["timestamp"]),
                 content=item["content"],
+                source_ids=item.get("source_ids", []),
+                memory_id=item.get("memory_id"),
+                revision=item.get("revision", 0),
+                state=item.get("state", "fact"),
+                subject=item.get("subject", "unknown"),
+                topic=item.get("topic", ""),
+                recorded_at=(
+                    datetime.fromisoformat(item["recorded_at"])
+                    if item.get("recorded_at")
+                    else None
+                ),
             )
             for item in data
         ]

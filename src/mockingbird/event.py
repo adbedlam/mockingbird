@@ -6,6 +6,7 @@ from typing import Any
 
 class EventType(Enum):
     MESSAGE_RECEIVED = auto()
+    RECEIVE_MESSAGE = MESSAGE_RECEIVED
     SEND_MESSAGE = auto()
     WAKE_UP = auto()
     GO_TO_SLEEP = auto()

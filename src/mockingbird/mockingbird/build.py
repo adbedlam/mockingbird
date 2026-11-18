@@ -1,10 +1,17 @@
 import argparse
 import logging
-from datetime import timedelta
 from pathlib import Path
 
 from mockingbird.config import load_config
 from mockingbird.conversation.history import History
+from mockingbird.freshness import (
+    history_info,
+    latest_history,
+    load_manifest,
+    participant_ids,
+    save_manifest,
+    select_persona_history,
+)
 from mockingbird.llm.client import LLM
 from mockingbird.persona.diary.diary import Diary
 from mockingbird.persona.inner.inner import InnerPrompt
@@ -33,24 +40,33 @@ def _build_history(config: dict) -> History:
     )
 
     preprocessing_config = config["preprocessing"]
+    latest = preprocessing_config.get("latest_messages")
     processor = make_processor(
         preprocessing_config["messenger"],
         vision_model,
+        participant_ids(config),
     )
 
     history = processor.process(
         user,
         other,
         config["paths"]["raw"],
-        preprocessing_config["message_start"],
-        preprocessing_config["message_end"],
+        0 if latest else preprocessing_config.get("message_start", 0),
+        None if latest else preprocessing_config.get("message_end"),
     )
+    if latest is not None:
+        history = latest_history(
+            history,
+            latest,
+            config.get("scheduler", {}).get("timezone", "Europe/Moscow"),
+        )
 
     logger.info("History built: %d messages", len(history.messages))
     return history
 
 
 def _build_inner_prompt(config: dict, history: History) -> InnerPrompt:
+    history = select_persona_history(history, config)
     logger.info("Building inner prompt")
 
     building_config = config["building_model"]
@@ -65,6 +81,7 @@ def _build_inner_prompt(config: dict, history: History) -> InnerPrompt:
 
 
 def _build_diary(config: dict, history: History) -> Diary:
+    history = select_persona_history(history, config)
     logger.info("Building diary")
 
     building_config = config["building_model"]
@@ -112,7 +129,7 @@ def build() -> None:
         logger.info("Building history")
         history = _build_history(config)
         history.save(history_path)
-    elif args.inner_prompt or args.diary or args.scheduler:
+    elif args.inner_prompt or args.diary:
         logger.info("Loading history")
         history = History.load(history_path)
 
@@ -121,12 +138,24 @@ def build() -> None:
         logger.info("Building inner prompt")
         inner_prompt = _build_inner_prompt(config, history)
         inner_prompt.save(inner_prompt_path)
+        manifest = load_manifest(output_dir)
+        manifest["profile"] = history_info(
+            select_persona_history(history, config),
+            config.get("scheduler", {}).get("timezone", "Europe/Moscow"),
+        )
+        save_manifest(output_dir, manifest)
 
     diary_path = output_dir / config["paths"]["diary_filename"]
     if args.diary or build_all:
         logger.info("Building diary")
         diary = _build_diary(config, history)
         diary.save(diary_path)
+        manifest = load_manifest(output_dir)
+        manifest["diary"] = history_info(
+            select_persona_history(history, config),
+            config.get("scheduler", {}).get("timezone", "Europe/Moscow"),
+        )
+        save_manifest(output_dir, manifest)
 
     logger.info("Mockingbird build complete")
 

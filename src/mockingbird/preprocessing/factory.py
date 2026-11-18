@@ -4,9 +4,11 @@ from mockingbird.preprocessing.vision import VisionModel
 
 
 def make_processor(
-    messenger: str, vision_model: VisionModel | None = None
+    messenger: str,
+    vision_model: VisionModel | None = None,
+    author_ids: dict[str, str] | None = None,
 ) -> Processor:
     if messenger == "telegram":
-        return TelegramProcessor(vision_model)
+        return TelegramProcessor(vision_model, author_ids)
 
     raise SystemExit(f"Cannot pick a preprocessor for {messenger}")

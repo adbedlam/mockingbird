@@ -3,22 +3,20 @@ name = "mockingbird"
 version = "0.1.0"
 description = "A persistent digital agent that simulates a person's communication style, memory, and autonomous behavior."
 readme = "README.md"
-authors = [
-    { name = "Silazemli", email = "you@example.com" }
-]
 requires-python = ">=3.13"
 dependencies = [
-    "emoji>=2.16.0",
     "httpx>=0.28.1",
-    "matplotlib>=3.11.2",
-    "numpy>=2.5.3",
     "openai>=3.14.1",
     "python-dotenv>=1.2.4",
-    "scipy>=1.18.1",
+    "pyyaml>=6.0.3",
+    "tzdata>=2026.6",
 ]
 
 [project.scripts]
 mockingbird = "mockingbird.mockingbird:main"
+mockingbird-telegram = "mockingbird.telegram:main"
+mockingbird-business = "mockingbird.telegram_business:main"
+mockingbird-dashboard = "mockingbird.dashboard:main"
 
 [build-system]
 requires = ["uv_build>=0.12.15,<0.13.0"]
@@ -29,8 +27,6 @@ dev = [
     "black>=26.5.1",
     "isort>=9.0.1",
     "mypy>=2.3.1",
-    "numpy>=2.5.3",
-    "pandas-stubs>=3.0.5.260914",
     "pre-commit>=4.3.0",
     "pytest>=9.1.1",
     "types-pyyaml>=6.0.12.20260906",
@@ -54,5 +50,5 @@ exclude = [
     '\.venv/',
 ]
 
-[tool.deptry]
-known_first_party = ["mockingbird"]
+[tool.pytest.ini_options]
+testpaths = ["tests"]

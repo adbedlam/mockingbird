@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass
 from typing import Generic, TypeVar
-import math
 
 ValueType = TypeVar("ValueType")
 
@@ -13,6 +13,16 @@ class Distribution(Generic[ValueType]):
     values: list[ValueType]
     probabilities: list[float]
 
+    def __post_init__(self) -> None:
+        if not self.values or len(self.values) != len(self.probabilities):
+            raise ValueError(
+                "Distribution requires nonempty values and matching weights"
+            )
+        if any(not math.isfinite(p) or p < 0 for p in self.probabilities):
+            raise ValueError("Weights must be finite and nonnegative")
+        if sum(self.probabilities) <= 0:
+            raise ValueError("Distribution has zero total weight")
+
     def sample(self) -> ValueType:
         return random.choices(
             self.values,
@@ -20,11 +30,13 @@ class Distribution(Generic[ValueType]):
             k=1,
         )[0]
 
+
 def smooth_distribution(
     distribution: Distribution[ValueType],
     sigma: float = 0.5,
     circular: bool = False,
 ) -> Distribution[ValueType]:
+    """Smooth weights by index; callers must supply an evenly spaced grid."""
     if sigma <= 0:
         raise ValueError("sigma must be positive")
 

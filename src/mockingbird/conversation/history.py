@@ -27,6 +27,10 @@ class History:
         user: str,
         last_n: int,
     ) -> list[llm.Message]:
+        if last_n < 0:
+            raise ValueError("last_n cannot be negative")
+        if last_n == 0:
+            return []
         messages = self.messages[-last_n:]
 
         return [
@@ -37,10 +41,8 @@ class History:
             for message in messages
         ]
 
-    def save(self, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-
-        data = {
+    def to_dict(self) -> dict:
+        return {
             "user": self.user,
             "other": self.other,
             "messages": [
@@ -60,14 +62,21 @@ class History:
             ],
         }
 
-        path.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2),
+    def save(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(
+            json.dumps(self.to_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        temporary.replace(path)
 
     @classmethod
     def load(cls, path: Path) -> History:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        return cls.from_dict(json.loads(path.read_text(encoding="utf-8")))
+
+    @classmethod
+    def from_dict(cls, data: dict) -> History:
 
         messages = [
             conversation.Message(

@@ -21,4 +21,6 @@ Do not infer a stable habit from an isolated typo, punctuation mark, or grammati
 Preserve the distinction between intentional stylistic choices, informal conventions, and likely accidental errors wherever the evidence permits.
 
 Conclude with practical instructions for reproducing {user}'s mechanical writing style without exaggerating its quirks or introducing errors that are not supported by evidence.
+
+Include several short verbatim examples by {user} with their original punctuation and spelling. Explicitly explain when to omit commas and final periods. Do not silently correct the examples or prescribe more polished writing than the source. Separate the partner's habits from {user}'s.
 """
