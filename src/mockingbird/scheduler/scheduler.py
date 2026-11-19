@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 from random import Random
 
-from mockingbird.scheduler.profile import BehaviorProfile
+from mockingbird.scheduler.profile import (
+    BehaviorProfile,
+    validate_scheduler_settings,
+)
 
 
 class MessageKind(StrEnum):
@@ -72,15 +75,16 @@ class Scheduler:
         # min_reply_delay after the most recent fragment before generating it.
         if self.reply_due is None:
             delay = (
-                timedelta(seconds=self.config.min_reply_delay_seconds)
-                if self.config.reply_mode == "immediate"
+                timedelta(seconds=self.config["min_reply_delay_seconds"])
+                if self.config["reply_mode"] == "immediate"
                 else self.profile.reply_delay(self.rng)
             )
             self.reply_due = now + delay
         self.reply_due = max(
-            self.reply_due, now + timedelta(seconds=self.config.min_reply_delay_seconds)
+            self.reply_due,
+            now + timedelta(seconds=self.config["min_reply_delay_seconds"]),
         )
-        if self.config.reply_mode == "history":
+        if self.config["reply_mode"] == "history":
             self.reply_due = self.profile.next_active(self.reply_due)
 
     def set_busy(self, until: datetime | None) -> None:
@@ -94,10 +98,10 @@ class Scheduler:
             if self.busy_until is not None and now < self.busy_until:
                 self.reply_due = (
                     self.profile.next_active(self.busy_until)
-                    if self.config.reply_mode == "history"
+                    if self.config["reply_mode"] == "history"
                     else self.busy_until
                 )
-            elif self.config.reply_mode == "history" and not self.profile.is_active(
+            elif self.config["reply_mode"] == "history" and not self.profile.is_active(
                 now
             ):
                 self.reply_due = self.profile.next_active(now)
@@ -113,7 +117,7 @@ class Scheduler:
         if self.planned and self.planned[0] <= now:
             due = self.planned[0]
             reason = None
-            if (now - due).total_seconds() > self.config.max_lateness_seconds:
+            if (now - due).total_seconds() > self.config["max_lateness_seconds"]:
                 reason = (
                     "Просроченная инициатива пропущена, догонять расписание не нужно"
                 )
@@ -121,7 +125,7 @@ class Scheduler:
                 reason = "Предыдущая инициатива ещё без ответа"
             elif self.reply_due is not None:
                 reason = "Сначала нужно ответить на входящие сообщения"
-            elif self.initiations_sent >= self.config.max_initiations_per_day:
+            elif self.initiations_sent >= self.config["max_initiations_per_day"]:
                 reason = "Достигнут дневной лимит инициатив"
             elif self.busy_until is not None and now < self.busy_until:
                 reason = "Персона занята"
@@ -130,13 +134,13 @@ class Scheduler:
             elif (
                 self.last_outgoing is not None
                 and (now - self.last_outgoing).total_seconds()
-                < self.config.min_initiation_gap_seconds
+                < self.config["min_initiation_gap_seconds"]
             ):
                 reason = "С последнего сообщения персоны прошло слишком мало времени"
             elif (
                 self.last_incoming is not None
                 and (now - self.last_incoming).total_seconds()
-                < self.config.silence_before_initiation_seconds
+                < self.config["silence_before_initiation_seconds"]
             ):
                 reason = "Недавно уже общались, новая инициатива не нужна"
             if reason is not None:
@@ -185,7 +189,8 @@ class Scheduler:
         self._check_pending(decision)
         now = self.profile.local(now)
         immediate_reply = (
-            decision.kind == MessageKind.REPLY and self.config.reply_mode == "immediate"
+            decision.kind == MessageKind.REPLY
+            and self.config["reply_mode"] == "immediate"
         )
         if not immediate_reply and (
             not self.profile.is_active(now) or now.date() != decision.at.date()
@@ -210,7 +215,7 @@ class Scheduler:
     def retry_later(self, decision: Decision, now: datetime) -> None:
         self._check_pending(decision)
         due = self.profile.local(now) + timedelta(minutes=5)
-        if decision.kind != MessageKind.REPLY or self.config.reply_mode == "history":
+        if decision.kind != MessageKind.REPLY or self.config["reply_mode"] == "history":
             due = self.profile.next_active(due)
         if decision.kind == MessageKind.REPLY:
             self.reply_due = due
@@ -224,7 +229,7 @@ class Scheduler:
         return {
             "version": 1,
             "pair": list(pair),
-            "config": asdict(self.config),
+            "config": self.config.copy(),
             "day": self.day.isoformat() if self.day else None,
             "planned": [t.isoformat() for t in self.planned],
             "initiations_sent": self.initiations_sent,
@@ -266,12 +271,14 @@ class Scheduler:
             raise ValueError(
                 "Scheduler state version or participant pair does not match"
             )
+        saved_config = data.get("config", {})
+        if not isinstance(saved_config, dict):
+            raise ValueError("Invalid scheduler configuration in state")
+        saved_config = dict(saved_config)
         # Older snapshots predate reply_mode; their behavior was "history".
-        from mockingbird.scheduler.profile import SchedulerConfig
-
-        if asdict(SchedulerConfig.from_dict(data.get("config", {}))) != asdict(
-            profile.config
-        ):
+        saved_config.setdefault("reply_mode", "history")
+        validate_scheduler_settings(saved_config)
+        if saved_config != profile.config:
             raise ValueError("Scheduler configuration changed; use a new state file")
         scheduler = cls(profile)
         scheduler.day = date.fromisoformat(data["day"]) if data["day"] else None

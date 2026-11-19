@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from random import Random
 from zoneinfo import ZoneInfo
@@ -12,62 +12,63 @@ from mockingbird.scheduler.observations import (
     response_observations,
 )
 
+SCHEDULER_SETTINGS = {
+    "timezone",
+    "reply_mode",
+    "max_initiations_per_day",
+    "bin_minutes",
+    "activity_coverage",
+    "min_weekday_messages",
+    "min_initiation_gap_seconds",
+    "silence_before_initiation_seconds",
+    "conversation_window",
+    "min_reply_delay_seconds",
+    "max_reply_delay_seconds",
+    "max_lateness_seconds",
+}
 
-@dataclass(frozen=True)
-class SchedulerConfig:
-    timezone: str = "Europe/Moscow"
-    reply_mode: str = "history"
-    max_initiations_per_day: int = 2
-    bin_minutes: int = 30
-    activity_coverage: float = 0.9
-    min_weekday_messages: int = 20
-    min_initiation_gap_seconds: int = 14400
-    silence_before_initiation_seconds: int = 2700
-    conversation_window: int = 600
-    min_reply_delay_seconds: int = 5
-    max_reply_delay_seconds: int = 14400
-    max_lateness_seconds: int = 1800
 
-    def __post_init__(self) -> None:
-        ZoneInfo(self.timezone)
-        if self.reply_mode not in ("history", "immediate"):
-            raise ValueError("reply_mode must be history or immediate")
-        if self.max_initiations_per_day < 0:
-            raise ValueError("max_initiations_per_day cannot be negative")
-        if self.bin_minutes <= 0 or 1440 % self.bin_minutes:
-            raise ValueError("bin_minutes must divide 1440 evenly")
-        if not 0 < self.activity_coverage <= 1:
-            raise ValueError("activity_coverage must be in (0, 1]")
-        for field in (
-            "min_weekday_messages",
-            "min_initiation_gap_seconds",
-            "silence_before_initiation_seconds",
-            "conversation_window",
-            "min_reply_delay_seconds",
-            "max_reply_delay_seconds",
-            "max_lateness_seconds",
-        ):
-            if getattr(self, field) <= 0:
-                raise ValueError(f"{field} must be positive")
-        if self.max_reply_delay_seconds < self.min_reply_delay_seconds:
-            raise ValueError("max_reply_delay_seconds must be >= minimum delay")
-
-    @classmethod
-    def from_dict(cls, values: dict) -> SchedulerConfig:
-        unknown = set(values) - cls.__dataclass_fields__.keys()
-        if unknown:
-            raise ValueError(
-                "Unknown scheduler settings: " + ", ".join(sorted(unknown))
-            )
-        return cls(**values)
+def validate_scheduler_settings(settings: dict) -> None:
+    if not isinstance(settings, dict):
+        raise ValueError("scheduler settings must be a mapping")
+    unknown = set(settings) - SCHEDULER_SETTINGS
+    if unknown:
+        raise ValueError("Unknown scheduler settings: " + ", ".join(sorted(unknown)))
+    missing = SCHEDULER_SETTINGS - set(settings)
+    if missing:
+        raise ValueError("Missing scheduler settings: " + ", ".join(sorted(missing)))
+    ZoneInfo(settings["timezone"])
+    if settings["reply_mode"] not in ("history", "immediate"):
+        raise ValueError("reply_mode must be history or immediate")
+    if settings["max_initiations_per_day"] < 0:
+        raise ValueError("max_initiations_per_day cannot be negative")
+    if settings["bin_minutes"] <= 0 or 1440 % settings["bin_minutes"]:
+        raise ValueError("bin_minutes must divide 1440 evenly")
+    if not 0 < settings["activity_coverage"] <= 1:
+        raise ValueError("activity_coverage must be in (0, 1]")
+    for key in (
+        "min_weekday_messages",
+        "min_initiation_gap_seconds",
+        "silence_before_initiation_seconds",
+        "conversation_window",
+        "min_reply_delay_seconds",
+        "max_reply_delay_seconds",
+        "max_lateness_seconds",
+    ):
+        if settings[key] <= 0:
+            raise ValueError(f"{key} must be positive")
+    if settings["max_reply_delay_seconds"] < settings["min_reply_delay_seconds"]:
+        raise ValueError("max_reply_delay_seconds must be >= minimum delay")
 
 
 class BehaviorProfile:
     """Fit only on real pair history, never on generated chat messages."""
 
-    def __init__(self, history: History, config: SchedulerConfig):
+    def __init__(self, history: History, config: dict):
+        validate_scheduler_settings(config)
+        config = dict(config)
         self.config = config
-        self.zone = ZoneInfo(config.timezone)
+        self.zone = ZoneInfo(config["timezone"])
         messages = sorted(
             (
                 replace(m, timestamp=self.local(m.timestamp, allow_naive=True))
@@ -80,7 +81,7 @@ class BehaviorProfile:
         if not modeled:
             raise ValueError("Scheduler needs real messages from the modeled person")
         normalized = History(history.user, history.other, messages)
-        bins = 1440 // config.bin_minutes
+        bins = 1440 // config["bin_minutes"]
         self.activity: dict[int, list[float]] = {}
         self.initiation_weights: dict[int, list[float]] = {}
         self.daily_counts: dict[int, list[int]] = {day: [] for day in range(7)}
@@ -92,14 +93,14 @@ class BehaviorProfile:
             weekday_counts[message.timestamp.weekday()][bucket] += 1
         for day in range(7):
             counts = weekday_counts[day]
-            if sum(counts) < config.min_weekday_messages:
+            if sum(counts) < config["min_weekday_messages"]:
                 counts = global_counts
             # Keep bins accounting for 90% of observed messages. No assumption
             # of conventional bedtime: a night owl can be active after midnight.
             selected: set[int] = set()
             accumulated = 0.0
             for bucket in sorted(range(bins), key=lambda i: counts[i], reverse=True):
-                if accumulated >= sum(counts) * config.activity_coverage:
+                if accumulated >= sum(counts) * config["activity_coverage"]:
                     break
                 selected.add(bucket)
                 accumulated += counts[bucket]
@@ -109,7 +110,7 @@ class BehaviorProfile:
 
         bursts = list(
             conversation_bursts(
-                normalized, timedelta(seconds=config.conversation_window)
+                normalized, timedelta(seconds=config["conversation_window"])
             )
         )
         initiations = [
@@ -143,7 +144,7 @@ class BehaviorProfile:
             delay.total_seconds()
             for _, delay in response_observations(
                 normalized,
-                timedelta(seconds=config.conversation_window),
+                timedelta(seconds=config["conversation_window"]),
                 max_delay=timedelta(hours=24),
             )
         ]
@@ -156,7 +157,7 @@ class BehaviorProfile:
         return timestamp.astimezone(self.zone)
 
     def bucket(self, timestamp: datetime) -> int:
-        return (timestamp.hour * 60 + timestamp.minute) // self.config.bin_minutes
+        return (timestamp.hour * 60 + timestamp.minute) // self.config["bin_minutes"]
 
     def is_active(self, timestamp: datetime) -> bool:
         local = self.local(timestamp)
@@ -164,14 +165,14 @@ class BehaviorProfile:
 
     def next_active(self, timestamp: datetime) -> datetime:
         current = self.local(timestamp)
-        for _ in range(7 * 1440 // self.config.bin_minutes + 1):
+        for _ in range(7 * 1440 // self.config["bin_minutes"] + 1):
             if self.is_active(current):
                 return current
-            minute = self.bucket(current) * self.config.bin_minutes
+            minute = self.bucket(current) * self.config["bin_minutes"]
             current = current.replace(
                 hour=minute // 60, minute=minute % 60, second=0, microsecond=0
             )
-            current += timedelta(minutes=self.config.bin_minutes)
+            current += timedelta(minutes=self.config["bin_minutes"])
         raise ValueError("No active time found in the weekly profile")
 
     def plan(self, day: date, rng: Random) -> list[datetime]:
@@ -180,7 +181,7 @@ class BehaviorProfile:
         # including days with zero initiatives.
         if len(day_counts) < 3:
             day_counts = [n for values in self.daily_counts.values() for n in values]
-        count = min(rng.choice(day_counts), self.config.max_initiations_per_day)
+        count = min(rng.choice(day_counts), self.config["max_initiations_per_day"])
         weights = self.initiation_weights[day.weekday()]
         if not any(weights) or count == 0:
             return []
@@ -189,15 +190,15 @@ class BehaviorProfile:
             if len(planned) >= count:
                 break
             bucket = rng.choices(range(len(weights)), weights=weights, k=1)[0]
-            seconds = bucket * self.config.bin_minutes * 60 + rng.randrange(
-                self.config.bin_minutes * 60
+            seconds = bucket * self.config["bin_minutes"] * 60 + rng.randrange(
+                self.config["bin_minutes"] * 60
             )
             candidate = datetime.combine(day, time(), self.zone) + timedelta(
                 seconds=seconds
             )
             if all(
                 abs((candidate - other).total_seconds())
-                >= self.config.min_initiation_gap_seconds
+                >= self.config["min_initiation_gap_seconds"]
                 for other in planned
             ):
                 planned.append(candidate)
@@ -207,7 +208,7 @@ class BehaviorProfile:
         seconds = rng.choice(self.reply_delays) if self.reply_delays else 60.0
         return timedelta(
             seconds=max(
-                self.config.min_reply_delay_seconds,
-                min(seconds, self.config.max_reply_delay_seconds),
+                self.config["min_reply_delay_seconds"],
+                min(seconds, self.config["max_reply_delay_seconds"]),
             )
         )
