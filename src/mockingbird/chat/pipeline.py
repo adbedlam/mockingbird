@@ -1,70 +1,40 @@
-"""Observable local chat orchestration; terminal and model are replaceable.
+"""Coordinate chat scheduling, model work, persistence, and delivery.
 
-Only the main thread touches history, scheduler state, and audit files. The
-daemon worker receives an immutable request snapshot and returns raw output.
+Only the main thread touches history and scheduler state. The model runner
+returns raw output for the coordinator to validate and apply.
 """
 
 from __future__ import annotations
 
-import json
-import os
-import queue
-import threading
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 from datetime import date, datetime
 from pathlib import Path
-from uuid import uuid4
+from typing import assert_never
 
+from mockingbird.chat.commands import CommandRouter
+from mockingbird.chat.errors import (
+    DeliveryBlocked,
+    DeliveryDeferred,
+    DeliverySuperseded,
+)
+from mockingbird.chat.events import EventRecorder, PipelineEvent
+from mockingbird.chat.model_runner import ModelRunner
+from mockingbird.chat.presenter import status_text, wait_message
+from mockingbird.chat.requests import RequestStore
+from mockingbird.chat.snapshot import SnapshotStore
+from mockingbird.chat.tasks import (
+    DiaryTask,
+    LifePlanTask,
+    ModelResult,
+    PendingRequest,
+    ReplyTask,
+    RequestTask,
+)
 from mockingbird.mockingbird.mockingbird import Draft, Mockingbird
-from mockingbird.observability import export_bundle, start_run
-from mockingbird.persona.diary.runtime import DiaryBatch
+from mockingbird.observability import start_run
 from mockingbird.scheduler.scheduler import Action, Decision
-
-
-@dataclass(frozen=True)
-class PipelineEvent:
-    at: str
-    stage: str
-    message: str
-    data: dict = field(default_factory=dict)
-
-    @property
-    def reason_label(self) -> str:
-        return {
-            "application": "Проверка приложения",
-            "batch": "Пояснение модели к пакету",
-        }.get(str(self.data.get("reason_source", "")), "Решение модели")
-
-
-@dataclass
-class PendingRequest:
-    decision: Decision | None
-    path: Path
-    started: float
-    heartbeat: float
-    cancelled: bool = False
-    diary_batch: DiaryBatch | None = None
-    life_date: str | None = None
-
-
-@dataclass(frozen=True)
-class ModelResult:
-    raw: str = ""
-    error: str = ""
-
-
-class DeliveryBlocked(RuntimeError):
-    """Delivery needs operator attention; never schedule a fresh automatic retry."""
-
-
-class DeliverySuperseded(RuntimeError):
-    """New Telegram messages made the draft stale immediately before sending."""
-
-
-class DeliveryDeferred(RuntimeError):
-    """A read failed before sending. Wait for transport recovery, not operator input."""
 
 
 class ChatPipeline:
@@ -92,10 +62,12 @@ class ChatPipeline:
         self.delivery_deferred = False
         self.state_sink = state_sink
         self.run_id, self.logger = start_run(directory, model_info or {})
-        self.event_number = 0
-        self.on_event = on_event
         self.model_info = model_info or {}
         self.clock = clock or (lambda: datetime.now(bird.scheduler.profile.zone))
+        self.recorder = EventRecorder(directory, self.run_id, on_event, self.clock)
+        self.requests = RequestStore(directory)
+        self.snapshots = SnapshotStore()
+        self.model_runner = ModelRunner(bird.model.complete)
         self.max_failures = max_failures
         self.max_generations = max_generations
         self.generations = 0
@@ -103,62 +75,17 @@ class ChatPipeline:
         self.paused = False
         self.closed = False
         self.inflight: PendingRequest | None = None
-        self._results: queue.Queue[ModelResult] = queue.Queue()
-        self._saved_state: tuple | None = None
         self._shown_plan: date | None = None
         self._shown_wait: tuple | None = None
-        self.last_request: Path | None = None
+        self.last_request = self.requests.latest()
         self.diary_requested = False
-        previous = list((directory / "requests").glob("*.json"))
-        if previous:
-            self.last_request = max(previous, key=lambda p: p.stat().st_mtime)
+        self.command_router = CommandRouter(self)
 
     def emit(self, stage: str, message: str, **data: object) -> None:
-        self.event_number += 1
-        data = {**data, "run_id": self.run_id, "event_number": self.event_number}
-        event = PipelineEvent(self.clock().isoformat(), stage, message, data)
-        self.directory.mkdir(parents=True, exist_ok=True)
-        with (self.directory / "decisions.jsonl").open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(asdict(event), ensure_ascii=False) + "\n")
-            stream.flush()
-            if stage in {"OUTPUT", "ERROR", "DELIVERY_UNKNOWN", "TG_ACK", "STOP"}:
-                os.fsync(stream.fileno())
-        with (self.directory / "chat_transcript.md").open(
-            "a", encoding="utf-8"
-        ) as stream:
-            stream.write(f"\n## {event.at} — {stage}\n\n{message}\n")
-            if "text" in data:
-                stream.write(
-                    "\n"
-                    + "\n".join("> " + line for line in str(data["text"]).splitlines())
-                    + "\n"
-                )
-            if "reason" in data:
-                stream.write(
-                    "\n" + event.reason_label + ": " + str(data["reason"]) + "\n"
-                )
-            if "request_path" in data:
-                stream.write(
-                    "\nКонтекст и сырой ответ: " + str(data["request_path"]) + "\n"
-                )
-        self.on_event(event)
+        self.recorder.emit(stage, message, **data)
 
     def persist(self) -> None:
-        scheduler = self.bird.scheduler
-        state = (
-            scheduler.day,
-            tuple(scheduler.planned),
-            scheduler.reply_due,
-            scheduler.revision,
-            scheduler.initiations_sent,
-            scheduler.busy_until,
-            len(self.bird.live.messages),
-        )
-        if state != self._saved_state:
-            if self.state_sink is not None:
-                self.state_sink()
-            self.bird.save(self.directory)
-            self._saved_state = state
+        self.snapshots.persist(self.bird, self.directory, self.state_sink)
 
     def start(self, *, run_step: bool = True) -> None:
         bird = self.bird
@@ -166,13 +93,13 @@ class ChatPipeline:
             "SESSION",
             f"Персона: {bird.history.user}; собеседник: {bird.history.other}. "
             f"Модель: {self.model_info.get('model', type(bird.model).__name__)}. "
-            f"Часовой пояс: {bird.scheduler.config.timezone}.",
+            f"Часовой пояс: {bird.scheduler.config['timezone']}.",
         )
-        mode = bird.scheduler.config.reply_mode
+        mode = bird.scheduler.config["reply_mode"]
         self.emit(
             "MODE",
             (
-                f"Быстрые ответы: через {bird.scheduler.config.min_reply_delay_seconds} сек. после последнего фрагмента, даже вне активных часов. Инициативы — по обычным правилам."
+                f"Быстрые ответы: через {bird.scheduler.config['min_reply_delay_seconds']} сек. после последнего фрагмента, даже вне активных часов. Инициативы — по обычным правилам."
                 if mode == "immediate"
                 else "Ответы и инициативы следуют времени из истории. Долгое ожидание будет показано явно; для обычного тестового диалога есть --fast-replies."
             ),
@@ -244,188 +171,36 @@ class ChatPipeline:
             f"Ответ запланирован на {due.isoformat() if due else '—'}. "
             "Новые фрагменты до ответа объединяются в одну реплику.",
         )
-        if self.inflight is not None and self.inflight.decision is not None:
+        if self.inflight is not None and isinstance(self.inflight.task, ReplyTask):
             self.emit(
                 "SUPERSEDED",
                 "Пришло новое сообщение во время генерации. Старый результат будет отброшен; затем соберём обновлённый контекст.",
             )
 
     def status(self) -> str:
-        s = self.bird.scheduler
-        return "\n".join(
-            [
-                f"Время: {self.clock().isoformat()} | режим ответов: {s.config.reply_mode}",
-                f"Запрос к модели: {'выполняется' if self.inflight else 'нет'} | генерации: {self.generations}/{self.max_generations if self.max_generations is not None else 'без лимита'}",
-                f"Пауза: {'да' if self.paused else 'нет'} | ошибок подряд: {self.failures}/{self.max_failures}",
-                f"Ожидаемый ответ: {s.reply_due.isoformat() if s.reply_due else 'нет'}",
-                f"Инициатив отправлено: {s.initiations_sent}/{s.config.max_initiations_per_day} | ожидаем ответ собеседника: {'да' if s.awaiting_reply else 'нет'}",
-                "Оставшиеся слоты: "
-                + (", ".join(t.isoformat() for t in s.planned) or "нет"),
-                "Симуляция дня: "
-                + (
-                    f"план {'сохранён' if self.bird.life.local(self.clock()).date().isoformat() in self.bird.life.days else 'пока отсутствует'}; дневник ежедневно в {self.bird.life.diary_hour}:00 и при выходе"
-                    if self.bird.life
-                    else "отключена"
-                ),
-                "Память: "
-                + (
-                    f"{len(self.bird.memory.entries)} актуальных записей слоя памяти; {len(self.bird.memory.pending)}/{self.bird.memory.update_every} входящих в очереди"
-                    if self.bird.memory
-                    else "только исходный дневник"
-                ),
-            ]
+        return status_text(
+            self.bird,
+            self.clock(),
+            inflight=self.inflight is not None,
+            generations=self.generations,
+            max_generations=self.max_generations,
+            paused=self.paused,
+            failures=self.failures,
+            max_failures=self.max_failures,
         )
 
     def command(self, text: str) -> bool:
-        """Return False only for /quit; commands never become model input."""
-        command = text.strip()
-        if command == "/quit":
-            return False
-        if command in ("/help", "/?"):
-            self.emit(
-                "HELP",
-                "/status — состояние; /plan — инициативы; /life — смоделированные занятия; /memory [тема] — локальный поиск памяти; /context — файл точного запроса; /context full — весь запрос; /history — последние реплики; /diary — дневник и смоделированные дни; /diary update — обновить по новым входящим; /pause — пауза; /resume — продолжить; /quit — выход.",
-            )
-        elif command == "/export":
-            memory_directory = (
-                self.bird.memory.directory
-                if self.bird.memory
-                else (self.bird.life.directory.parent if self.bird.life else None)
-            )
-            path = export_bundle(self.directory, memory_directory)
-            self.emit("EXPORT", f"Архив отладки с приватной перепиской: {path}")
-        elif command == "/status":
-            self.emit("STATUS", self.status())
-        elif command == "/life":
-            life = self.bird.life
-            self.emit(
-                "LIFE_STATE",
-                (
-                    life.view(self.clock())
-                    if life
-                    else "Симуляция дня отключена в настройках."
-                ),
-            )
-        elif command == "/memory" or command.startswith("/memory "):
-            query = command[len("/memory") :].strip()
-            selected = self.bird.select_memory(self.clock(), query or None)
-            self.emit(
-                "MEMORY_SEARCH",
-                f"Локальный поиск: выбрано {len(selected.hits)} из {selected.considered} актуальных записей; {selected.chars}/{selected.max_chars} символов. Запрос: {selected.query or 'текущий разговор'}",
-                text="\n\n".join(
-                    f"{hit.entry.to_string()}\nВыбрано: {hit.reason}; совпавшие основы: {', '.join(hit.matched_terms) or 'нет'}; историческое: {'да' if hit.historical else 'нет'}"
-                    for hit in selected.hits
-                )
-                or "Совпадений и подходящего недавнего контекста нет",
-                selection=selected.report(),
-            )
-        elif command == "/plan":
-            s = self.bird.scheduler
-            self.emit(
-                "PLAN",
-                f"Дата: {s.day}. Оставшиеся инициативы: "
-                + (", ".join(t.isoformat() for t in s.planned) or "нет")
-                + ". Ответ: "
-                + (s.reply_due.isoformat() if s.reply_due else "не ожидается"),
-            )
-        elif command in ("/context", "/context full"):
-            if self.last_request is None:
-                self.emit(
-                    "CONTEXT",
-                    "Запросов в этой папке пока нет: контекст будет сохранён перед первой генерацией.",
-                )
-            else:
-                value = (
-                    self.last_request.read_text(encoding="utf-8")
-                    if command.endswith(" full")
-                    else str(self.last_request)
-                )
-                self.emit("CONTEXT", value)
-        elif command in ("/diary", "/diary update"):
-            if command == "/diary" and self.bird.life is not None:
-                self._advance_life(checkpoint=True)
-                self.emit("DAILY_DIARY", self.bird.life.diary_view())
-            memory = self.bird.memory
-            if memory is None:
-                self.emit(
-                    "DIARY",
-                    "Накопление памяти в этом запуске отключено. Исходный дневник:\n"
-                    + str(self.bird.diary),
-                )
-            elif command == "/diary":
-                memory.render()
-                self.emit(
-                    "DIARY",
-                    f"В очереди {len(memory.pending)} новых входящих. Дневник: {memory.directory / 'diary.md'}.\n"
-                    + str(memory.combined()),
-                )
-            elif memory.pending:
-                self.diary_requested = True
-                self.emit(
-                    "DIARY_QUEUED",
-                    "Запрошено обновление дневника. Сначала завершим ответ собеседнику; затем отдельно покажем добавленные записи или причину пропуска.",
-                )
-            else:
-                self.emit(
-                    "DIARY_SKIP",
-                    "Новых входящих для дневника нет; повторно обработанные сообщения не отправляем модели.",
-                )
-        elif command == "/history":
-            rows = [
-                f"{m.timestamp.isoformat()} | {m.author}: {m.text or ''}"
-                for m in self.bird.live.messages[-10:]
-            ]
-            self.emit(
-                "HISTORY",
-                "\n".join(rows) if rows else "В текущем диалоге пока нет сообщений.",
-            )
-        elif command == "/pause":
-            self.paused = True
-            if self.inflight is not None:
-                self.inflight.cancelled = True
-            self.emit(
-                "PAUSED",
-                "Новые запросы остановлены. Результат уже выполняющегося запроса также не будет выведен. /resume — продолжить.",
-            )
-        elif command == "/resume":
-            if (
-                self.max_generations is not None
-                and self.generations >= self.max_generations
-            ):
-                self.emit(
-                    "LIMIT",
-                    "Лимит запросов этого запуска исчерпан. Для нового лимита перезапусти процесс с --max-generations.",
-                )
-            else:
-                self.paused = False
-                self.failures = 0
-                self.emit(
-                    "RESUMED",
-                    "Генерация возобновлена. Просроченные инициативы не догоняем.",
-                )
-        else:
-            self.emit(
-                "HELP",
-                "Неизвестная команда. /help — список команд. Чтобы передать текст со слешем модели, начни строку с //.",
-            )
-        return True
+        return self.command_router.handle(text)
 
     def _update_request(self, pending: PendingRequest, **changes: object) -> None:
-        data = json.loads(pending.path.read_text(encoding="utf-8"))
-        data.update(changes)
-        temporary = pending.path.with_suffix(".tmp")
-        temporary.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        temporary.replace(pending.path)
+        self.requests.update(pending.path, **changes)
 
     def _begin(self, decision: Decision, now: datetime) -> None:
         messages = self.bird.context(decision, now)
         self._launch(
             messages,
             now,
-            str(decision.kind),
-            decision=decision,
+            task=ReplyTask(decision),
             memory_selection=self.bird.last_memory_selection,
         )
 
@@ -437,8 +212,7 @@ class ChatPipeline:
         self._launch(
             batch.messages,
             now,
-            "diary",
-            diary_batch=batch,
+            task=DiaryTask(batch),
             memory_selection=batch.memory_selection,
         )
 
@@ -448,11 +222,10 @@ class ChatPipeline:
         self._launch(
             life.prepare(now, self.bird.inner_prompt.content),
             now,
-            "life_plan",
-            life_date=life.local(now).date().isoformat(),
+            task=LifePlanTask(life.local(now).date().isoformat()),
         )
 
-    def _advance_life(self, *, checkpoint: bool = False) -> None:
+    def advance_life(self, *, checkpoint: bool = False) -> None:
         if self.bird.life is not None:
             for stage, message in self.bird.life.advance(
                 self.clock(), checkpoint=checkpoint
@@ -463,16 +236,30 @@ class ChatPipeline:
         self,
         messages: list,
         now: datetime,
-        kind: str,
         *,
-        decision: Decision | None = None,
-        diary_batch: DiaryBatch | None = None,
-        life_date: str | None = None,
+        task: RequestTask,
         memory_selection: dict | None = None,
     ) -> None:
-        request_id = uuid4().hex
-        request_path = self.directory / "requests" / f"{request_id}.json"
-        request_path.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(task, ReplyTask):
+            kind = str(task.decision.kind)
+            scheduler_reason = task.decision.reason
+        elif isinstance(task, DiaryTask):
+            kind = "diary"
+            scheduler_reason = "Обновление дневника по новым входящим"
+        elif isinstance(task, LifePlanTask):
+            kind = "life_plan"
+            scheduler_reason = "План смоделированного дня"
+        else:
+            assert_never(task)
+
+        request_path = self.requests.create(
+            run_id=self.run_id,
+            at=now,
+            kind=kind,
+            model=self.model_info,
+            messages=messages,
+            memory_selection=memory_selection,
+        )
         if memory_selection is not None:
             selected = memory_selection.get("selected", [])
             relevant = sum(row["reason"] == "relevance" for row in selected)
@@ -492,31 +279,15 @@ class ChatPipeline:
                 selection=memory_selection,
                 request_path=str(request_path),
             )
-        request_path.write_text(
-            json.dumps(
-                {
-                    "id": request_id,
-                    "run_id": self.run_id,
-                    "at": now.isoformat(),
-                    "kind": kind,
-                    "model": self.model_info,
-                    "messages": messages,
-                    "status": "pending",
-                    "memory_selection": memory_selection,
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
         self.last_request = request_path
+        started = time.monotonic()
+        future = self.model_runner.submit(messages)
         self.inflight = PendingRequest(
-            decision,
+            task,
             request_path,
-            time.monotonic(),
-            time.monotonic(),
-            diary_batch=diary_batch,
-            life_date=life_date,
+            started,
+            started,
+            future,
         )
         self.generations += 1
         self.emit(
@@ -525,34 +296,15 @@ class ChatPipeline:
             f"Контекст: {len(messages)} сообщений, {sum(len(str(m['content'])) for m in messages)} символов; "
             "Точный состав контекста сохранён в файле запроса. Ожидаем ответ API.",
             request_path=str(request_path),
-            scheduler_reason=(
-                decision.reason
-                if decision
-                else (
-                    "План смоделированного дня"
-                    if life_date
-                    else "Обновление дневника по новым входящим"
-                )
-            ),
+            scheduler_reason=scheduler_reason,
         )
-
-        def work() -> None:
-            try:
-                result = ModelResult(raw=self.bird.model.complete(messages))
-            except Exception as exc:
-                status = getattr(exc, "status_code", None)
-                result = ModelResult(
-                    error=type(exc).__name__ + (f" (HTTP {status})" if status else "")
-                )
-            self._results.put(result)
-
-        threading.Thread(target=work, daemon=True, name="mockingbird-model").start()
 
     def _finish(self, result: ModelResult, now: datetime) -> None:
         pending = self.inflight
         if pending is None:
             return
         self.inflight = None
+        task = pending.task
         elapsed = round(time.monotonic() - pending.started, 2)
         self._update_request(
             pending,
@@ -564,8 +316,8 @@ class ChatPipeline:
             self.paused
             or pending.cancelled
             or (
-                pending.decision is not None
-                and not self.bird.scheduler.is_pending(pending.decision)
+                isinstance(task, ReplyTask)
+                and not self.bird.scheduler.is_pending(task.decision)
             )
         ):
             self._update_request(pending, status="discarded")
@@ -575,23 +327,24 @@ class ChatPipeline:
                 request_path=str(pending.path),
             )
             return
-        if pending.diary_batch is not None:
-            self._finish_diary(pending, result, now)
+        if isinstance(task, DiaryTask):
+            self._finish_diary(pending, task, result, now)
             return
-        if pending.life_date is not None:
-            self._finish_life(pending, result, now)
+        if isinstance(task, LifePlanTask):
+            self._finish_life(pending, task, result, now)
             return
-        assert pending.decision is not None
+        assert isinstance(task, ReplyTask)
+        decision = task.decision
         changing_plan = False
         try:
             if result.error:
                 raise RuntimeError(result.error)
-            draft = self.bird.parse_draft(result.raw, pending.decision.kind)
+            draft = self.bird.parse_draft(result.raw, decision.kind)
             changing_plan = draft.life_update is not None
             if self.delivery is not None and draft.send:
-                life_change = self.delivery(pending.decision, draft, now, pending.path)
+                life_change = self.delivery(decision, draft, now, pending.path)
             else:
-                life_change = self.bird.commit(pending.decision, draft, now)
+                life_change = self.bird.commit(decision, draft, now)
         except DeliveryDeferred as exc:
             self.delivery_deferred = True
             self._update_request(pending, status="delivery_deferred", error=str(exc))
@@ -626,7 +379,7 @@ class ChatPipeline:
                 error=result.error or type(exc).__name__,
                 validation_error=str(exc) if isinstance(exc, ValueError) else "",
             )
-            self.bird.scheduler.retry_later(pending.decision, now)
+            self.bird.scheduler.retry_later(decision, now)
             self.persist()
             if changing_plan:
                 self.emit(
@@ -684,19 +437,23 @@ class ChatPipeline:
             f"{self.bird.history.user} {'написал' if draft.send else 'пропустил инициативу'} ({elapsed} сек.).",
             text=draft.text,
             **({"reason": draft.reason} if draft.reason else {}),
-            kind=pending.decision.kind,
+            kind=decision.kind,
             request_path=str(pending.path),
         )
 
     def _finish_diary(
-        self, pending: PendingRequest, result: ModelResult, now: datetime
+        self,
+        pending: PendingRequest,
+        task: DiaryTask,
+        result: ModelResult,
+        now: datetime,
     ) -> None:
         memory = self.bird.memory
-        assert memory is not None and pending.diary_batch is not None
+        assert memory is not None
         try:
             if result.error:
                 raise RuntimeError(result.error)
-            update = memory.apply(pending.diary_batch, result.raw, now)
+            update = memory.apply(task.batch, result.raw, now)
         except Exception as exc:
             self.failures += 1
             memory.defer(now)
@@ -754,11 +511,15 @@ class ChatPipeline:
         )
 
     def _finish_life(
-        self, pending: PendingRequest, result: ModelResult, now: datetime
+        self,
+        pending: PendingRequest,
+        task: LifePlanTask,
+        result: ModelResult,
+        now: datetime,
     ) -> None:
         life = self.bird.life
-        assert life is not None and pending.life_date is not None
-        if pending.life_date != life.local(now).date().isoformat():
+        assert life is not None
+        if task.date != life.local(now).date().isoformat():
             self._update_request(pending, status="discarded", error="life_date_changed")
             self.emit(
                 "DISCARD",
@@ -768,7 +529,7 @@ class ChatPipeline:
         try:
             if result.error:
                 raise RuntimeError(result.error)
-            day = life.apply(result.raw, pending.life_date, now)
+            day = life.apply(result.raw, task.date, now)
         except Exception as exc:
             life.defer(now)
             self.failures += 1
@@ -796,15 +557,12 @@ class ChatPipeline:
         if self.closed or self.delivery_blocked or self.delivery_deferred:
             return
         now = self.clock()
-        try:
-            result = self._results.get_nowait()
-        except queue.Empty:
-            pass
-        else:
-            self._finish(result, now)
+        pending = self.inflight
+        if pending is not None and pending.future.done():
+            self._finish(pending.future.result(), now)
         if self.delivery_blocked or self.delivery_deferred:
             return
-        self._advance_life()
+        self.advance_life()
         decision = self.bird.scheduler.tick(now)
         scheduler = self.bird.scheduler
         if self._shown_plan != scheduler.day:
@@ -816,7 +574,7 @@ class ChatPipeline:
                     ", ".join(t.isoformat() for t in scheduler.planned)
                     or "инициативы не запланированы"
                 )
-                + f". Максимум {scheduler.config.max_initiations_per_day} в день.",
+                + f". Максимум {scheduler.config['max_initiations_per_day']} в день.",
             )
         self.persist()
         if decision.action == Action.SKIP:
@@ -886,25 +644,17 @@ class ChatPipeline:
         wait = (decision.action, decision.due_at, self.paused, scheduler.awaiting_reply)
         if wait != self._shown_wait:
             self._shown_wait = wait
-            if self.paused:
-                message = "Запросы на паузе. Входящие сохраняются; /status — состояние."
-            elif decision.due_at:
-                message = f"Следующее событие: {decision.due_at.isoformat()}. Можно писать; /status — состояние."
-            else:
-                message = "Ожидаем твоё сообщение или план нового дня. Сегодня самостоятельных сообщений больше нет."
-            self.emit("WAIT", message)
+            self.emit("WAIT", wait_message(decision, self.paused))
 
     def close(self, *, checkpoint_life: bool = True) -> None:
         if self.closed:
             return
         self.closed = True
         if checkpoint_life:
-            self._advance_life(checkpoint=True)
+            self.advance_life(checkpoint=True)
         self.persist()
         if self.inflight is not None:
-            self._update_request(
-                self.inflight, status="abandoned", closed_at=self.clock().isoformat()
-            )
+            self.requests.abandon(self.inflight.path, self.clock())
         self.emit(
             "STOP",
             "Состояние сохранено, чат остановлен."

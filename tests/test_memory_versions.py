@@ -8,10 +8,10 @@ import pytest
 from test_memory_and_freshness import NOW, incoming
 from test_pipeline import Model, bird_for
 
+from mockingbird.chat.pipeline import ChatPipeline
 from mockingbird.persona.diary.diary import Diary
 from mockingbird.persona.diary.entry import Entry
 from mockingbird.persona.diary.runtime import DiaryMemory
-from mockingbird.pipeline import ChatPipeline
 
 
 def memory_at(path, base=None, **kwargs):

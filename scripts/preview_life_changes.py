@@ -11,11 +11,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from mockingbird.chat.pipeline import ChatPipeline
 from mockingbird.config import CONFIG_PATH, PROJECT_ROOT, load_config
+from mockingbird.interfaces.terminal import render
 from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.persona.life import PersonaLife
-from mockingbird.pipeline import ChatPipeline
-from mockingbird.terminal import render
 
 
 def main() -> None:

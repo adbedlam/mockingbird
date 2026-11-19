@@ -5,12 +5,13 @@ from pathlib import Path
 
 import pytest
 import yaml
+from config_helpers import scheduler_settings
 
 from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message
 from mockingbird.persona.diary.diary import Diary
 from mockingbird.persona.inner.inner import InnerPrompt
-from mockingbird.scheduler.profile import BehaviorProfile, SchedulerConfig
+from mockingbird.scheduler.profile import BehaviorProfile
 from mockingbird.scheduler.scheduler import Action, Scheduler
 
 
@@ -40,6 +41,7 @@ def test_preview_writes_report_without_network_or_artifact_changes(
         "other": "Partner",
         # No real key: constructing an LLM or making a network request is a bug.
         "inference_model": {"host": "https://example.invalid/v1", "model": "fake"},
+        "scheduler": scheduler_settings(),
         "paths": {
             "raw": str(tmp_path / "raw"),
             "processed": str(processed),
@@ -98,7 +100,7 @@ def test_slow_generation_cannot_send_outside_active_window():
         "Partner",
         [Message("Partner", now.replace(hour=8)), Message("Persona", now)],
     )
-    scheduler = Scheduler(BehaviorProfile(history, SchedulerConfig()))
+    scheduler = Scheduler(BehaviorProfile(history, scheduler_settings()))
     scheduler.day = now.date()
     scheduler.planned = [now]
     decision = scheduler.tick(now)
@@ -119,7 +121,7 @@ def test_zero_daily_budget_disables_initiatives():
         [Message("Partner", now.replace(hour=8)), Message("Persona", now)],
     )
     scheduler = Scheduler(
-        BehaviorProfile(history, SchedulerConfig(max_initiations_per_day=0))
+        BehaviorProfile(history, scheduler_settings(max_initiations_per_day=0))
     )
     assert scheduler.tick(now).action == Action.WAIT
     assert not scheduler.planned

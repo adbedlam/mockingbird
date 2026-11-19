@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 from test_pipeline import Clock, Model, bird_for, pump
 
+from mockingbird.chat.pipeline import ChatPipeline
 from mockingbird.persona.life import PersonaLife
-from mockingbird.pipeline import ChatPipeline
 
 
 def plan(day="2026-11-17"):

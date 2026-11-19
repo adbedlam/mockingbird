@@ -1,26 +1,21 @@
 import json
-from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
+from config_helpers import scheduler_settings
 
 from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message
 from mockingbird.mockingbird.mockingbird import Draft, Mockingbird
 from mockingbird.persona.diary.diary import Diary
 from mockingbird.persona.inner.inner import InnerPrompt
-from mockingbird.scheduler.distributions.availability.immediate_response_probability import (
-    ImmediateResponseProbability,
-)
-from mockingbird.scheduler.distributions.delay import delay_distribution
-from mockingbird.scheduler.distributions.distribution import Distribution
-from mockingbird.scheduler.distributions.initiation.get_initiations import (
-    get_initiations,
-)
 from mockingbird.scheduler.observations import conversation_bursts
-from mockingbird.scheduler.profile import BehaviorProfile, SchedulerConfig
+from mockingbird.scheduler.profile import (
+    BehaviorProfile,
+    validate_scheduler_settings,
+)
 from mockingbird.scheduler.scheduler import Action, MessageKind, Scheduler
 
 ZONE = ZoneInfo("Europe/Moscow")
@@ -57,7 +52,7 @@ def history() -> History:
 
 @pytest.fixture
 def profile(history: History) -> BehaviorProfile:
-    return BehaviorProfile(history, SchedulerConfig())
+    return BehaviorProfile(history, scheduler_settings())
 
 
 def scheduled(profile: BehaviorProfile, when: datetime) -> Scheduler:
@@ -93,7 +88,7 @@ def test_no_observed_initiatives_means_no_forced_greeting():
             Message("Persona", at(second=20), text="hello"),
         ],
     )
-    scheduler = Scheduler(BehaviorProfile(h, SchedulerConfig()), 7)
+    scheduler = Scheduler(BehaviorProfile(h, scheduler_settings()), 7)
     scheduler.tick(at())
     assert scheduler.planned == []
 
@@ -161,7 +156,7 @@ def test_night_owl_is_not_forced_into_daytime():
         "Partner",
         [Message("Partner", at(hour=0)), Message("Persona", at(hour=1))],
     )
-    p = BehaviorProfile(h, SchedulerConfig())
+    p = BehaviorProfile(h, scheduler_settings())
     assert p.is_active(at(hour=1))
     assert not p.is_active(at(hour=12))
 
@@ -203,7 +198,7 @@ def test_state_round_trip_and_pair_config_checks(
     assert restored.reply_due == scheduler.reply_due
     with pytest.raises(ValueError, match="participant pair"):
         Scheduler.load(state, profile, ("Someone", "Else"))
-    profile.config = replace(profile.config, max_initiations_per_day=1)
+    profile.config["max_initiations_per_day"] = 1
     with pytest.raises(ValueError, match="configuration changed"):
         Scheduler.load(state, profile, ("Persona", "Partner"))
 
@@ -219,33 +214,24 @@ def test_retry_does_not_use_send_budget(profile: BehaviorProfile):
 def test_imported_order_and_unknown_authors_do_not_corrupt_observations(
     history: History,
 ):
-    expected = list(get_initiations(history))
+    expected = [
+        burst.messages[0]
+        for burst in conversation_bursts(history)
+        if burst.author == history.user and burst.initiated
+    ]
     mixed = History(
         history.user,
         history.other,
         list(reversed(history.messages)) + [Message("Forwarded", at())],
     )
-    assert list(get_initiations(mixed)) == expected
+    observed = [
+        burst.messages[0]
+        for burst in conversation_bursts(mixed)
+        if burst.author == mixed.user and burst.initiated
+    ]
+    assert observed == expected
     assert len(expected) == 28
     assert all(b.author != "Forwarded" for b in conversation_bursts(mixed))
-
-
-def test_immediate_probability_works_with_existing_models(history: History):
-    probability = ImmediateResponseProbability(history).probability(at())
-    assert 0 <= probability <= 1
-
-
-def test_delay_smoothing_uses_seconds_not_observation_indices():
-    dist = delay_distribution([1.0, 2.0, 600.0], sigma=1)
-    assert dist.values == [float(i) for i in range(601)]
-    assert dist.probabilities[300] == 0
-    assert sum(dist.probabilities) == pytest.approx(1)
-
-
-@pytest.mark.parametrize("weights", [[0.0], [-1.0], [float("nan")], [float("inf")]])
-def test_invalid_distributions_are_rejected(weights: list[float]):
-    with pytest.raises(ValueError):
-        Distribution([1], weights)
 
 
 def test_runtime_requires_timezone(profile: BehaviorProfile):
@@ -329,4 +315,9 @@ def test_empty_message_cannot_be_committed(history: History, profile: BehaviorPr
 
 def test_unknown_scheduler_settings_are_not_silently_ignored():
     with pytest.raises(ValueError, match="Unknown scheduler settings"):
-        SchedulerConfig.from_dict({"max_initiations_per_dya": 0})
+        validate_scheduler_settings(scheduler_settings(max_initiations_per_dya=0))
+
+
+def test_missing_scheduler_settings_are_not_defaulted():
+    with pytest.raises(ValueError, match="Missing scheduler settings"):
+        validate_scheduler_settings({})

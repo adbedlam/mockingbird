@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import mockingbird.conversation.message as conversation
 import mockingbird.llm.message as llm
@@ -99,3 +101,46 @@ class History:
             other=data["other"],
             messages=messages,
         )
+
+    @classmethod
+    def history_info(cls, history: History, timezone: str = "Europe/Moscow") -> dict:
+        zone = ZoneInfo(timezone)
+        messages = sorted(
+            history.messages,
+            key=lambda message: (
+                message.timestamp.replace(tzinfo=zone)
+                if message.timestamp.tzinfo is None
+                else message.timestamp.astimezone(zone)
+            ),
+        )
+        samples = [message.to_sample() for message in messages]
+        return {
+            "pair": [history.user, history.other],
+            "messages": len(messages),
+            "first": messages[0].timestamp.isoformat() if messages else None,
+            "last": messages[-1].timestamp.isoformat() if messages else None,
+            "sha256": hashlib.sha256(
+                json.dumps(samples, ensure_ascii=False).encode()
+            ).hexdigest(),
+        }
+
+    @classmethod
+    def latest_history(
+        cls, history: History, count: int, timezone: str = "Europe/Moscow"
+    ) -> History:
+        if count < 1:
+            raise ValueError("recent message limit must be positive")
+        zone = ZoneInfo(timezone)
+        messages = sorted(
+            (
+                message
+                for message in history.messages
+                if message.author in (history.user, history.other)
+            ),
+            key=lambda message: (
+                message.timestamp.replace(tzinfo=zone)
+                if message.timestamp.tzinfo is None
+                else message.timestamp.astimezone(zone)
+            ),
+        )
+        return cls(history.user, history.other, messages[-count:])

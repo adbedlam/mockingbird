@@ -39,11 +39,10 @@ The build stage turns an export into conversation history, a persona prompt, and
 ### Data and persona
 
 - [Configuration](src/mockingbird/config.py) loads YAML settings and environment variables, resolves data paths, and saves a discovered Telegram Business connection ID to the local `.env`.
-- [Preprocessing](src/mockingbird/preprocessing/) imports the Telegram export, selects messages from the configured pair, and can describe images through the configured vision model.
-- [Conversation](src/mockingbird/conversation/) defines the message and history types shared by the importer, scheduler, and agent. It also handles saving and loading conversation history.
+- [Preprocessing](src/mockingbird/preprocessing/) imports the Telegram export, selects messages from the configured pair, and can describe images through the configured vision model. The Telegram source adapter in [preprocessing/telegram/source.py](src/mockingbird/preprocessing/telegram/source.py) selects the latest raw export or cached history.
+- [Conversation](src/mockingbird/conversation/) defines shared message and history types. [history.py](src/mockingbird/conversation/history.py) handles persistence, chronological selection, and source fingerprints; [identity.py](src/mockingbird/conversation/identity.py) provides stable conversation-pair IDs.
 - [Artifact builder](src/mockingbird/mockingbird/build.py) runs the export import, profile generation, and diary generation as separate stages or as a full build.
-- [Freshness](src/mockingbird/freshness.py) selects the history used for persona building and records source dates and fingerprints so refreshes can detect changes.
-- [Persona profile](src/mockingbird/persona/inner/) builds the prompt that describes how the person writes and relates to the other participant. [Persona refresh](src/mockingbird/persona/refresh.py) prepares, initializes, and updates the stored profile and diary.
+- [Persona profile](src/mockingbird/persona/inner/) builds the prompt that describes how the person writes and relates to the other participant. [Persona refresh](src/mockingbird/persona/refresh.py) prepares, initializes, and updates the stored profile and diary; [persona/source.py](src/mockingbird/persona/source.py) applies input limits and tracks artifact provenance.
 - [Diary and memory](src/mockingbird/persona/diary/) stores entries tied to source messages, incorporates new conversations, and retrieves relevant entries for the next model request.
 - [Daily life](src/mockingbird/persona/life.py) manages the persona's simulated activities. It uses the daily plan to inform availability and can update future activities based on agreements made in the conversation.
 
@@ -53,11 +52,10 @@ The build stage turns an export into conversation history, a persona prompt, and
 - [Agent](src/mockingbird/mockingbird/mockingbird.py) combines the profile, recent conversation, selected memories, and current activity into model context. It parses generated drafts and updates conversation state when delivery is recorded.
 - [Prompts](src/mockingbird/prompts/) holds shared instructions for how the agent should express itself in the conversation.
 - [Model client](src/mockingbird/llm/) defines the structure of model messages and sends completion requests to an OpenAI-compatible endpoint.
-- [Pipeline](src/mockingbird/pipeline.py) connects the scheduler, agent, and delivery interface. It tracks pending work, coordinates model calls, and publishes events for the terminal and runtime logs.
-- [Terminal](src/mockingbird/terminal.py) powers the local chat, handles operator commands, and displays pipeline events. [Event types](src/mockingbird/event.py) define the shared event data.
-- [Telegram Business](src/mockingbird/telegram_business.py) receives Telegram updates, checks who can receive messages, and delivers replies through the Business Bot API. [Business CLI](src/mockingbird/business_cli.py) exposes setup and runtime commands. [Telegram state](src/mockingbird/telegram_state.py) contains participant checks and the delivery journal. `mockingbird-telegram` is a compatibility alias for `mockingbird-business`.
+- [Chat pipeline](src/mockingbird/chat/) connects the scheduler, agent, and delivery interface. It tracks pending work, coordinates model calls, and publishes events for the terminal and runtime logs.
+- [Interfaces](src/mockingbird/interfaces/) adapt the pipeline to local terminal and Telegram Business sessions. The [terminal interface](src/mockingbird/interfaces/terminal.py) handles local commands and displays pipeline events. [Telegram Business](src/mockingbird/interfaces/telegram/) receives updates, checks who can receive messages, and delivers replies through the Bot API; its `business.py`, `cli.py`, and `state.py` modules contain transport, operator commands, and durable state. `mockingbird-telegram` is an alias for `mockingbird-business`.
 - [Observability](src/mockingbird/observability.py) writes per-run logs, redacts secrets in formatted output, and packages diagnostics for export. These local files can contain conversation data.
-- [Dashboard](src/mockingbird/dashboard.py) serves a read-only localhost view of connection status, scheduling decisions, delivery history, diary entries, and model requests using the bundled [HTML interface](src/mockingbird/dashboard.html).
+- [Dashboard](src/mockingbird/dashboard/) serves a read-only localhost view of connection status, scheduling decisions, delivery history, diary entries, and model requests using its bundled [HTML interface](src/mockingbird/dashboard/dashboard.html).
 
 ## Telegram Business
 

@@ -5,10 +5,12 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
+from config_helpers import scheduler_settings
 
+from mockingbird.chat.events import PipelineEvent
+from mockingbird.chat.pipeline import ChatPipeline
 from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message
-from mockingbird.freshness import load_latest_history, select_persona_history
 from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.persona.diary.diary import Diary
 from mockingbird.persona.diary.entry import Entry
@@ -20,7 +22,8 @@ from mockingbird.persona.refresh import (
     refresh_needed,
     refresh_persona,
 )
-from mockingbird.pipeline import ChatPipeline, PipelineEvent
+from mockingbird.persona.source import select_persona_history
+from mockingbird.preprocessing.telegram.source import load_latest_history
 
 ZONE = ZoneInfo("Europe/Moscow")
 NOW = datetime(2026, 11, 17, 23, tzinfo=ZONE)
@@ -192,11 +195,11 @@ def config(tmp_path: Path) -> dict:
             "temperature": 0.3,
         },
         "inference_model": {"host": "https://example.invalid/v1", "model": "fake"},
-        "scheduler": {
-            "reply_mode": "immediate",
-            "max_initiations_per_day": 0,
-            "min_reply_delay_seconds": 1,
-        },
+        "scheduler": scheduler_settings(
+            reply_mode="immediate",
+            max_initiations_per_day=0,
+            min_reply_delay_seconds=1,
+        ),
         "paths": {
             "raw": tmp_path / "raw",
             "processed": processed,
@@ -407,7 +410,7 @@ def test_history_zero_limit_does_not_expand_to_whole_archive(config: dict):
 def test_automatic_refresh_respects_total_request_budget(
     config: dict, tmp_path: Path, monkeypatch, capsys
 ):
-    from mockingbird import terminal
+    from mockingbird.interfaces import terminal
 
     config["persona_build"]["auto_refresh_on_start"] = True
     monkeypatch.setattr(terminal, "load_config", lambda path: config)

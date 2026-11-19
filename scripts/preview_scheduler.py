@@ -104,7 +104,7 @@ def main() -> None:
     metadata = {
         "start": start.isoformat(),
         "end": end.date().isoformat(),
-        "timezone": profile.config.timezone,
+        "timezone": profile.config["timezone"],
         "mode": (
             "Настоящая генерация текста LLM"
             if args.generate
@@ -159,7 +159,7 @@ def main() -> None:
             )
             log(
                 "PLAN",
-                f"План на день: {times}. Лимит: {profile.config.max_initiations_per_day}.",
+                f"План на день: {times}. Лимит: {profile.config['max_initiations_per_day']}.",
             )
         if decision.action == Action.SKIP:
             log("SKIP", decision.reason)

@@ -10,16 +10,16 @@ import httpx
 import pytest
 from test_pipeline import Clock, Model, bird_for, pump
 
-from mockingbird.observability import export_bundle
-from mockingbird.pipeline import ChatPipeline
-from mockingbird.telegram_business import (
+from mockingbird.chat.pipeline import ChatPipeline
+from mockingbird.interfaces.telegram.business import (
     BotAPIError,
     BotNetworkError,
     BusinessBotAPI,
     BusinessJournal,
     TelegramBusinessTransport,
 )
-from mockingbird.telegram_state import SetupError
+from mockingbird.interfaces.telegram.state import SetupError
+from mockingbird.observability import export_bundle
 
 
 def connection(**overrides):

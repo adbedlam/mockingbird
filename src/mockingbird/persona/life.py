@@ -10,6 +10,12 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from mockingbird.llm.message import Message, Role
+from mockingbird.persona.prompts.life import (
+    LIFE_CONTEXT_INSTRUCTIONS,
+    LIFE_UPDATE_DISABLED,
+    life_update_protocol,
+    prepare_life_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -103,23 +109,7 @@ class PersonaLife:
         return [
             Message(
                 role=Role.SYSTEM,
-                content=(
-                    f"Ты планируешь ВЫМЫШЛЕННЫЙ день симуляции персоны {self.user}. "
-                    "Это разрешённая пользователем ролевая жизнь, не сведения о реальном человеке. "
-                    "Придумай 3–6 обычных конкретных занятий на день с учётом интересов и манеры персоны. "
-                    "Не своди день к 'сидел и ничего не делал'. Можно бытовые дела, прогулку, отдых, "
-                    "работу над небольшим собственным проектом. Не придумывай поступки собеседника, "
-                    "встречи с реальными людьми, результаты собеседований, болезни, покупки и новые "
-                    "биографические факты. Старые планы из профиля не объявляй текущими обязательствами. "
-                    "План охватывает сегодня, включая уже прошедшее утро: это ретроспективная симуляция, "
-                    "не наблюдение. Занятия не пересекаются, не переходят через полночь. "
-                    "Описание каждого занятия — короткая фраза от первого лица в прошедшем времени, "
-                    "разговорная, без канцелярита и без точки на конце, например 'разобрал файлы проекта'. "
-                    "Не пиши инструкции в описании. Верни только JSON с полями "
-                    "date (YYYY-MM-DD), activities (список объектов start, end в HH:MM и activity), "
-                    "reason (краткое видимое пояснение выбора, не скрытые рассуждения). "
-                    f"Точное местное время {now.isoformat()}.\nПрофиль как источник интересов:\n{profile}"
-                ),
+                content=prepare_life_prompt(self.user, profile, now.isoformat()),
             ),
             Message(
                 role=Role.USER,
@@ -203,43 +193,8 @@ class PersonaLife:
     ) -> str:
         day = self.days.get(self.local(now).date().isoformat())
         if not allowed or day is None or not incoming:
-            return (
-                "Внешний JSON: life_update=null. Изменять план в этом запросе нельзя."
-            )
-        example = {
-            "date": day["date"],
-            "base_revision": day["revision"],
-            "source_id": incoming[-1]["id"],
-            "reason": "короткое пояснение договорённости",
-            "changes": [
-                {
-                    "op": "replace",
-                    "id": "ID будущего занятия",
-                    "start": "HH:MM",
-                    "end": "HH:MM",
-                    "activity": "краткое описание нового занятия в прошедшем времени",
-                }
-            ],
-        }
-        return (
-            "ИЗМЕНЕНИЯ ПЛАНА ПО ДИАЛОГУ. Внешний JSON ответа должен содержать life_update. "
-            "Обычно это null. Меняй план только если текущее входящее предлагает конкретно перенести, "
-            "заменить, добавить или отменить будущее занятие И ты соглашаешься в тексте ответа. "
-            "Обычный вопрос о планах, гипотеза, отказ и уточняющий вопрос не являются договорённостью: life_update=null. "
-            "Если времени не хватает или оно неясно — уточни, ничего не меняя. Нельзя принимать решение за собеседника "
-            "или объявлять совместное дело уже состоявшимся. Не обещай, что поменял план, без life_update. "
-            "Менять можно только сегодняшний будущий распорядок; прошлые и уже начатые занятия неприкосновенны. "
-            "Для новых/перенесённых дел выбирай время строго позже текущего, с запасом на генерацию ответа. "
-            "Остальные занятия не удаляй и не меняй; пересечения запрещены. "
-            "changes — 1–8 операций: replace (существующий id и новые start/end/activity), "
-            "cancel (только op и id), add (op/start/end/activity, без id). "
-            "activity — описание только собственного симулированного занятия, не биографический факт или действие партнёра. "
-            "source_id возьми из текущих входящих ниже, base_revision и date — из текущего плана. "
-            "Образец структуры (содержимое подставь по реальной договорённости):\n"
-            + json.dumps(example, ensure_ascii=False)
-            + "\nТекущие входящие для привязки решения:\n"
-            + json.dumps(incoming, ensure_ascii=False)
-        )
+            return LIFE_UPDATE_DISABLED
+        return life_update_protocol(day, incoming)
 
     def update(
         self, update: dict, now: datetime, incoming: list[dict], reply: str
@@ -452,32 +407,23 @@ class PersonaLife:
         now = self.local(now)
         day = self.days.get(now.date().isoformat())
         state = self.rows(day, now) if day else []
-        return (
-            "РАЗРЕШЁННАЯ СИМУЛЯЦИЯ ДНЯ. Это вымышленные занятия роли, отдельно от реальной биографии. "
-            "В диалоге можно естественно говорить о них от первого лица; не надо каждый раз оговаривать симуляцию. "
-            "Говори о completed как о законченных делах, current как о текущем занятии, planned только как о намерении. "
-            "Актуальный распорядок — только activities. Описания before в recent_plan_changes показывают отменённые или заменённые планы, не действующие занятия. "
-            "Не говори, что весь день ничего не делал, если здесь есть завершённые занятия. "
-            "Не выдавай будущее за прошлое. Новые будущие занятия допустимы только как явно принятая правка life_update по текущему диалогу. "
-            "Если план отсутствует, текущие занятия пока неизвестны.\n"
-            + json.dumps(
-                {
-                    "at": now.isoformat(),
-                    "date": day["date"] if day else None,
-                    "revision": day["revision"] if day else None,
-                    "activities": state,
-                    "recent_plan_changes": day["changes"][-3:] if day else [],
-                    "recent_simulated_diary": [
-                        {"date": key, **day["diary"]}
-                        for key, day in sorted(self.days.items())
-                        if "diary" in day
-                        and now.date() - timedelta(days=7)
-                        <= date.fromisoformat(key)
-                        < now.date()
-                    ],
-                },
-                ensure_ascii=False,
-            )
+        return LIFE_CONTEXT_INSTRUCTIONS + json.dumps(
+            {
+                "at": now.isoformat(),
+                "date": day["date"] if day else None,
+                "revision": day["revision"] if day else None,
+                "activities": state,
+                "recent_plan_changes": day["changes"][-3:] if day else [],
+                "recent_simulated_diary": [
+                    {"date": key, **day["diary"]}
+                    for key, day in sorted(self.days.items())
+                    if "diary" in day
+                    and now.date() - timedelta(days=7)
+                    <= date.fromisoformat(key)
+                    < now.date()
+                ],
+            },
+            ensure_ascii=False,
         )
 
     def view(self, now: datetime) -> str:

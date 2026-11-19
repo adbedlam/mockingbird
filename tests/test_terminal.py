@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from config_helpers import scheduler_settings
 
 from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message
@@ -102,7 +103,10 @@ def test_real_terminal_input_status_context_and_unicode_output(
             "model": "local-test",
             "timeout_seconds": 5,
         },
-        "scheduler": {"max_initiations_per_day": 0, "min_reply_delay_seconds": 1},
+        "scheduler": scheduler_settings(
+            max_initiations_per_day=0,
+            min_reply_delay_seconds=1,
+        ),
         "life": {"enabled": with_life},
         "paths": {
             "raw": str(tmp_path / "raw"),

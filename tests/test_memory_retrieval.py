@@ -8,11 +8,11 @@ import pytest
 from test_memory_versions import apply, memory_at, operation
 from test_pipeline import Model, bird_for, pump
 
+from mockingbird.chat.pipeline import ChatPipeline
 from mockingbird.conversation.message import Message
 from mockingbird.persona.diary.diary import Diary
 from mockingbird.persona.diary.entry import Entry
 from mockingbird.persona.diary.retrieval import MemorySearchConfig, select_memories
-from mockingbird.pipeline import ChatPipeline
 
 NOW = datetime(2026, 11, 18, 13, tzinfo=ZoneInfo("Europe/Moscow"))
 

@@ -4,18 +4,16 @@ from pathlib import Path
 
 from mockingbird.config import load_config
 from mockingbird.conversation.history import History
-from mockingbird.freshness import (
-    history_info,
-    latest_history,
-    load_manifest,
-    participant_ids,
-    save_manifest,
-    select_persona_history,
-)
 from mockingbird.llm.client import LLM
 from mockingbird.persona.diary.diary import Diary
 from mockingbird.persona.inner.inner import InnerPrompt
+from mockingbird.persona.source import (
+    load_manifest,
+    save_manifest,
+    select_persona_history,
+)
 from mockingbird.preprocessing.factory import make_processor
+from mockingbird.preprocessing.telegram.source import participant_ids
 from mockingbird.preprocessing.vision import VisionModel
 
 logger = logging.getLogger(__name__)
@@ -55,7 +53,7 @@ def _build_history(config: dict) -> History:
         None if latest else preprocessing_config.get("message_end"),
     )
     if latest is not None:
-        history = latest_history(
+        history = History.latest_history(
             history,
             latest,
             config.get("scheduler", {}).get("timezone", "Europe/Moscow"),
@@ -139,7 +137,7 @@ def build() -> None:
         inner_prompt = _build_inner_prompt(config, history)
         inner_prompt.save(inner_prompt_path)
         manifest = load_manifest(output_dir)
-        manifest["profile"] = history_info(
+        manifest["profile"] = History.history_info(
             select_persona_history(history, config),
             config.get("scheduler", {}).get("timezone", "Europe/Moscow"),
         )
@@ -151,7 +149,7 @@ def build() -> None:
         diary = _build_diary(config, history)
         diary.save(diary_path)
         manifest = load_manifest(output_dir)
-        manifest["diary"] = history_info(
+        manifest["diary"] = History.history_info(
             select_persona_history(history, config),
             config.get("scheduler", {}).get("timezone", "Europe/Moscow"),
         )

@@ -6,7 +6,6 @@
 
 import argparse
 import json
-from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -55,10 +54,9 @@ def main() -> None:
     bird = Mockingbird.from_config(
         config, model=None if args.generate else Offline(), memory_enabled=False
     )
-    config_reply = bird.scheduler.config
-    bird.scheduler = Scheduler(
-        BehaviorProfile(bird.history, replace(config_reply, reply_mode="immediate")), 7
-    )
+    config_reply = dict(bird.scheduler.config)
+    config_reply["reply_mode"] = "immediate"
+    bird.scheduler = Scheduler(BehaviorProfile(bird.history, config_reply), 7)
     life = PersonaLife(output / "life", bird.history.user, bird.history.other, zone.key)
     bird.life = life
     messages = life.prepare(now, bird.inner_prompt.content)

@@ -8,7 +8,11 @@ import pytest
 from test_pipeline import pump
 from test_telegram_business import attach, business, incoming
 
-from mockingbird.telegram_business import BotAPIError, BotNetworkError, BusinessBotAPI
+from mockingbird.interfaces.telegram.business import (
+    BotAPIError,
+    BotNetworkError,
+    BusinessBotAPI,
+)
 
 
 def test_poll_outage_does_not_persist_manual_pause_or_generate(business):

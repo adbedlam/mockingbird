@@ -12,20 +12,20 @@ import time
 from contextlib import ExitStack
 from pathlib import Path
 
+from mockingbird.chat.pipeline import ChatPipeline
 from mockingbird.config import CONFIG_PATH, ENV_PATH, PROJECT_ROOT, load_config
-from mockingbird.freshness import pair_id
-from mockingbird.mockingbird.mockingbird import Mockingbird
-from mockingbird.observability import export_bundle
-from mockingbird.pipeline import ChatPipeline
-from mockingbird.telegram_business import (
+from mockingbird.conversation.identity import pair_id
+from mockingbird.interfaces.telegram.business import (
     BotAPIError,
     BotNetworkError,
     BusinessBotAPI,
     BusinessJournal,
     TelegramBusinessTransport,
 )
-from mockingbird.telegram_state import SetupError, participant_id
-from mockingbird.terminal import SessionLock, render
+from mockingbird.interfaces.telegram.state import SetupError, participant_id
+from mockingbird.interfaces.terminal import SessionLock, render
+from mockingbird.mockingbird.mockingbird import Mockingbird
+from mockingbird.observability import export_bundle
 
 
 def ready(transport: TelegramBusinessTransport) -> None:

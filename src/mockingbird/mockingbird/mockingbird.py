@@ -9,13 +9,8 @@ from pathlib import Path
 from typing import Protocol
 
 from mockingbird.conversation.history import History
+from mockingbird.conversation.identity import pair_id
 from mockingbird.conversation.message import Message as ConversationMessage
-from mockingbird.freshness import (
-    history_info,
-    load_latest_history,
-    load_manifest,
-    pair_id,
-)
 from mockingbird.llm.client import LLM
 from mockingbird.llm.message import Message, Role
 from mockingbird.persona.diary.diary import Diary
@@ -27,9 +22,11 @@ from mockingbird.persona.diary.retrieval import (
 from mockingbird.persona.diary.runtime import DiaryMemory
 from mockingbird.persona.inner.inner import InnerPrompt
 from mockingbird.persona.life import PersonaLife
+from mockingbird.persona.source import load_manifest
+from mockingbird.preprocessing.telegram.source import load_latest_history
 from mockingbird.prompts.imitation import IMITATION
 from mockingbird.prompts.supress_llm_behavior import SUPRESS_LLM_BEHAVIOR
-from mockingbird.scheduler.profile import BehaviorProfile, SchedulerConfig
+from mockingbird.scheduler.profile import BehaviorProfile
 from mockingbird.scheduler.scheduler import Action, Decision, MessageKind, Scheduler
 
 
@@ -86,7 +83,7 @@ class Mockingbird:
             memory_max_age_days,
         )
         self.source_origin = ""
-        self.source_info = history_info(history)
+        self.source_info = History.history_info(history)
         self.persona_sources: dict = {}
         if memory is not None:
             self.diary = memory.combined()
@@ -105,9 +102,7 @@ class Mockingbird:
         history, origin = load_latest_history(config)
         if (history.user, history.other) != (config["user"], config["other"]):
             raise ValueError("Built history does not match configured participants")
-        profile = BehaviorProfile(
-            history, SchedulerConfig.from_dict(config.get("scheduler", {}))
-        )
+        profile = BehaviorProfile(history, config.get("scheduler", {}))
         settings = config["inference_model"]
         if model is None:
             model = LLM(
@@ -130,7 +125,7 @@ class Mockingbird:
                 history.user,
                 history.other,
                 base_diary,
-                timezone=profile.config.timezone,
+                timezone=profile.config["timezone"],
                 update_every=diary_settings.get("update_in", 200),
                 batch_size=diary_settings.get("batch_size", 200),
                 context_entries=limits.get("diary_last_n", 30),
@@ -156,7 +151,7 @@ class Mockingbird:
                     / "life",
                     history.user,
                     history.other,
-                    profile.config.timezone,
+                    profile.config["timezone"],
                     diary_hour=config.get("life", {}).get("diary_hour", 23),
                 )
                 if memory_enabled and config.get("life", {}).get("enabled", False)
@@ -167,7 +162,7 @@ class Mockingbird:
             memory_search=search_config,
         )
         bird.source_origin = origin
-        bird.source_info = history_info(history, profile.config.timezone)
+        bird.source_info = History.history_info(history, profile.config["timezone"])
         bird.persona_sources = load_manifest(processed)
         return bird
 
@@ -338,7 +333,7 @@ class Mockingbird:
             current.entries,
             query,
             now,
-            timezone=self.scheduler.config.timezone,
+            timezone=self.scheduler.config["timezone"],
             limit=self.diary_last_n,
             recent_days=self.memory_max_age_days,
             config=self.memory_search,
@@ -574,7 +569,7 @@ class Mockingbird:
 
 
 def main() -> None:
-    from mockingbird.terminal import main as terminal_main
+    from mockingbird.interfaces.terminal import main as terminal_main
 
     terminal_main()
 

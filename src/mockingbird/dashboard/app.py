@@ -1,4 +1,4 @@
-"""Read-only local Persona dashboard. No model calls or messaging controls."""
+"""Read-only local Persona dashboard server and data API."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 
 from mockingbird.config import CONFIG_PATH, PROJECT_ROOT, load_config
-from mockingbird.freshness import pair_id
+from mockingbird.conversation.identity import pair_id
 from mockingbird.observability import redact
 
 

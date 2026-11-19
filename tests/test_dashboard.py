@@ -6,7 +6,7 @@ import time
 import httpx
 import pytest
 
-from mockingbird.dashboard import (
+from mockingbird.dashboard.app import (
     DashboardData,
     create_server,
     dashboard_key,

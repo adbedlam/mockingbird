@@ -14,18 +14,18 @@ from typing import Any
 
 import httpx
 
-from mockingbird.config import save_business_connection_id
-from mockingbird.conversation.message import Message
-from mockingbird.mockingbird.mockingbird import Draft, Mockingbird
-from mockingbird.observability import redact
-from mockingbird.pipeline import (
-    ChatPipeline,
+from mockingbird.chat.errors import (
     DeliveryBlocked,
     DeliveryDeferred,
     DeliverySuperseded,
 )
+from mockingbird.chat.pipeline import ChatPipeline
+from mockingbird.config import save_business_connection_id
+from mockingbird.conversation.message import Message
+from mockingbird.interfaces.telegram.state import DeliveryJournal, SetupError
+from mockingbird.mockingbird.mockingbird import Draft, Mockingbird
+from mockingbird.observability import redact
 from mockingbird.scheduler.scheduler import Decision
-from mockingbird.telegram_state import DeliveryJournal, SetupError
 
 BUSINESS_UPDATES = [
     "business_connection",
@@ -942,7 +942,7 @@ class TelegramBusinessTransport:
 
 
 def main() -> None:
-    from mockingbird.business_cli import main as cli_main
+    from mockingbird.interfaces.telegram.cli import main as cli_main
 
     cli_main()
 

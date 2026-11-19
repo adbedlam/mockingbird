@@ -6,17 +6,19 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
+from config_helpers import scheduler_settings
 
+from mockingbird.chat.events import PipelineEvent
+from mockingbird.chat.pipeline import ChatPipeline
 from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message
+from mockingbird.interfaces.terminal import SessionLock
 from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.persona.diary.diary import Diary
 from mockingbird.persona.diary.entry import Entry
 from mockingbird.persona.inner.inner import InnerPrompt
-from mockingbird.pipeline import ChatPipeline, PipelineEvent
-from mockingbird.scheduler.profile import BehaviorProfile, SchedulerConfig
+from mockingbird.scheduler.profile import BehaviorProfile
 from mockingbird.scheduler.scheduler import Scheduler
-from mockingbird.terminal import SessionLock
 
 ZONE = ZoneInfo("Europe/Moscow")
 
@@ -73,7 +75,7 @@ def bird_for(model: Model) -> Mockingbird:
             ),
         ],
     )
-    profile = BehaviorProfile(source, SchedulerConfig(reply_mode="immediate"))
+    profile = BehaviorProfile(source, scheduler_settings(reply_mode="immediate"))
     return Mockingbird(
         source,
         InnerPrompt("Synthetic personality"),
@@ -255,7 +257,7 @@ def test_exclusive_session_lock_releases_after_exit(tmp_path: Path):
 
 def test_old_scheduler_snapshot_defaults_to_history_reply_mode(tmp_path: Path):
     bird = bird_for(Model())
-    history_config = SchedulerConfig()
+    history_config = scheduler_settings()
     profile = BehaviorProfile(bird.history, history_config)
     state = tmp_path / "scheduler.json"
     Scheduler(profile).save(state, ("Persona", "Partner"))
@@ -263,7 +265,7 @@ def test_old_scheduler_snapshot_defaults_to_history_reply_mode(tmp_path: Path):
     del data["config"]["reply_mode"]
     state.write_text(json.dumps(data), encoding="utf-8")
     restored = Scheduler.load(state, profile, ("Persona", "Partner"))
-    assert restored.config.reply_mode == "history"
+    assert restored.config["reply_mode"] == "history"
 
 
 def test_plain_reply_is_output_once_with_explicit_format_fallback(tmp_path: Path):

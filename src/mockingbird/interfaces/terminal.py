@@ -1,5 +1,3 @@
-"""Terminal transport for ChatPipeline. No messenger delivery lives here."""
-
 from __future__ import annotations
 
 import argparse
@@ -13,12 +11,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import BinaryIO
 
+from mockingbird.chat.events import PipelineEvent
+from mockingbird.chat.pipeline import ChatPipeline
+from mockingbird.chat.presenter import reason_label
 from mockingbird.config import CONFIG_PATH, PROJECT_ROOT, load_config
-from mockingbird.freshness import pair_id
+from mockingbird.conversation.identity import pair_id
 from mockingbird.llm.client import LLM
 from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.persona.refresh import refresh_needed, refresh_persona
-from mockingbird.pipeline import ChatPipeline, PipelineEvent
 
 if sys.platform == "win32":
     import msvcrt
@@ -70,7 +70,10 @@ def render(event: PipelineEvent) -> None:
     if "text" in event.data:
         print(str(event.data["text"]), flush=True)
     if "reason" in event.data:
-        print("  " + event.reason_label + ": " + str(event.data["reason"]), flush=True)
+        print(
+            "  " + reason_label(event.data) + ": " + str(event.data["reason"]),
+            flush=True,
+        )
     if event.stage == "REQUEST" and event.data.get("request_path"):
         print("  Контекст: " + str(event.data["request_path"]), flush=True)
 

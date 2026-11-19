@@ -7,8 +7,8 @@ import pytest
 from test_life import life_for, plan
 from test_pipeline import Clock, Model, bird_for, pump
 
+from mockingbird.chat.pipeline import ChatPipeline
 from mockingbird.mockingbird.mockingbird import Mockingbird
-from mockingbird.pipeline import ChatPipeline
 from mockingbird.scheduler.scheduler import MessageKind
 
 

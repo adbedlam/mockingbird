@@ -1,4 +1,4 @@
-"""Durable transport state shared by the official Telegram Business adapter."""
+"""Durable state shared by the official Telegram Business interface."""
 
 from __future__ import annotations
 

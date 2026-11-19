@@ -7,12 +7,13 @@ from pathlib import Path
 
 import pytest
 import yaml
+from config_helpers import scheduler_settings
 
 from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message
-from mockingbird.freshness import load_manifest
 from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.persona.refresh import bootstrap_local_persona
+from mockingbird.persona.source import load_manifest
 
 
 def config_for(tmp_path):
@@ -39,6 +40,7 @@ def config_for(tmp_path):
             "host": "https://invalid.example/v1",
             "model": "never-called",
         },
+        "scheduler": scheduler_settings(),
         "life": {"enabled": True},
         "diary": {"enabled": False},
     }
