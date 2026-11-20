@@ -214,7 +214,7 @@ def test_pending_reply_survives_restart_and_commands_are_not_model_input(
     pipeline.close()
     new_model = Model()
     restored = bird_for(new_model)
-    restored.restore(tmp_path)
+    restored.runtime_store.restore(tmp_path)
     assert [m.text for m in restored.live.messages] == ["remember this"]
     due = restored.scheduler.reply_due
     new_events: list[PipelineEvent] = []

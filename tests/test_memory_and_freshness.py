@@ -255,6 +255,8 @@ class RefreshModel:
         self.calls += 1
         if self.calls == 1:
             return "NEW_PROFILE_2026"
+        if self.calls == 2:
+            return "NEW_LIFE_PROMPT_2026"
         evidence = json.loads(messages[-1]["content"])[-1]
         return json.dumps(
             {
@@ -280,7 +282,10 @@ def test_refresh_is_preparable_without_model_and_uses_consistent_sources(
     diary = json.loads(
         (tmp_path / "review/diary.request.json").read_text(encoding="utf-8")
     )
-    assert profile["source"] == diary["source"]
+    life = json.loads(
+        (tmp_path / "review/life.request.json").read_text(encoding="utf-8")
+    )
+    assert profile["source"] == diary["source"] == life["source"]
     assert profile["source"]["first"].startswith("2026")
     assert "OLD_MESSAGE_2024" not in json.dumps(profile)
     assert "api_key" not in json.dumps(profile)
@@ -291,9 +296,12 @@ def test_refresh_validates_both_outputs_and_backs_up_old_artifacts(config: dict)
     before = (processed / "diary.json").read_bytes()
     model = RefreshModel()
     metadata = refresh_persona(config, model)
-    assert model.calls == 2
+    assert model.calls == 3
     assert metadata["last"].startswith("2026")
     assert (processed / "inner.md").read_text(encoding="utf-8") == "NEW_PROFILE_2026"
+    assert (processed / "life_prompt.md").read_text(
+        encoding="utf-8"
+    ) == "NEW_LIFE_PROMPT_2026"
     assert Diary.load(processed / "diary.json").entries[0].source_ids
     assert (
         list((processed / "persona_backups").rglob("diary.json"))[0].read_bytes()
@@ -303,6 +311,7 @@ def test_refresh_validates_both_outputs_and_backs_up_old_artifacts(config: dict)
         (processed / "persona_sources.json").read_text(encoding="utf-8")
     )
     assert manifest["profile"]["sha256"] == manifest["diary"]["sha256"]
+    assert manifest["life"]["sha256"] == manifest["profile"]["sha256"]
     assert not refresh_needed(config)
     (processed / "inner.md").unlink()
     assert refresh_needed(config)
@@ -352,7 +361,7 @@ def test_current_context_excludes_old_memories_but_keeps_new_cross_session_evide
     assert bird.memory is not None
     bird.memory.ingest([incoming("NEW_PREFERENCE_2026")])
     decision = bird.scheduler.tick(NOW)
-    payload = json.dumps(bird.context(decision, NOW))
+    payload = json.dumps(bird.context_builder.build(decision, NOW))
     assert "OLD_MEMORY_2024" not in payload
     assert "OLD_MESSAGE_2024" not in payload
     assert "NEW_PREFERENCE_2026" in payload
@@ -395,7 +404,7 @@ def test_pipeline_updates_diary_after_reply_with_visible_sources(
     assert not bird.memory.pending
     assert "GENERATED_REPLY_NOT_A_FACT" not in json.dumps(bird.memory.sources)
     assert "Partner told me their preference" in json.dumps(
-        bird.context(bird.scheduler.tick(now[0]), now[0])
+        bird.context_builder.build(bird.scheduler.tick(now[0]), now[0])
     )
     assert (bird.memory.directory / "diary.md").exists()
 
@@ -432,4 +441,4 @@ def test_automatic_refresh_respects_total_request_budget(
     with pytest.raises(SystemExit) as exc:
         terminal.main()
     assert exc.value.code == 1
-    assert "два запроса" in capsys.readouterr().err
+    assert "three requests" in capsys.readouterr().err

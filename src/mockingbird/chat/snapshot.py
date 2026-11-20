@@ -47,5 +47,5 @@ class SnapshotStore:
             return
         if state_sink is not None:
             state_sink()
-        bird.save(directory)
+        bird.runtime_store.save(directory)
         self._saved = snapshot

@@ -23,7 +23,8 @@ from mockingbird.chat.pipeline import ChatPipeline
 from mockingbird.config import save_business_connection_id
 from mockingbird.conversation.message import Message
 from mockingbird.interfaces.telegram.state import DeliveryJournal, SetupError
-from mockingbird.mockingbird.mockingbird import Draft, Mockingbird
+from mockingbird.mockingbird.draft import Draft
+from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.observability import redact
 from mockingbird.scheduler.scheduler import Decision
 
@@ -138,7 +139,7 @@ class BusinessJournal(DeliveryJournal):
     def applied(self, update_id: int, bird: Mockingbird | None, paused: bool) -> None:
         with self.db:
             if bird is not None:
-                self._set("state", bird.snapshot())
+                self._set("state", bird.runtime_store.snapshot())
             self._set("paused", paused)
             self.db.execute(
                 "UPDATE business_updates SET status='applied' WHERE id=?", (update_id,)
@@ -628,7 +629,9 @@ class TelegramBusinessTransport:
         pending.pop(self.message_key(message), None)
         with self.journal.db:
             if self.pipeline:
-                self.journal._set("state", self.pipeline.bird.snapshot())
+                self.journal._set(
+                    "state", self.pipeline.bird.runtime_store.snapshot()
+                )
             self.journal._set("pending_messages", pending)
 
     async def restore_messages(self) -> None:
@@ -842,7 +845,9 @@ class TelegramBusinessTransport:
                 continue
             payload = json.loads(row["payload"])
             if "after" in payload and self.pipeline:
-                self.pipeline.bird.apply_delivery(payload, row["message_id"])
+                self.pipeline.bird.delivery_coordinator.apply_delivery(
+                    payload, row["message_id"]
+                )
                 self.journal.complete(row["id"], self.pipeline.bird)
                 self.emit(
                     "BUSINESS_RECOVERED",
@@ -892,7 +897,7 @@ class TelegramBusinessTransport:
                 or not self.pipeline.bird.scheduler.is_pending(decision)
             ):
                 raise DeliverySuperseded()
-            prepared = self.pipeline.bird.prepare_delivery(
+            prepared = self.pipeline.bird.delivery_coordinator.prepare_delivery(
                 decision, draft, self.clock()
             )
             self._staged = (path.stem, prepared)
@@ -907,7 +912,7 @@ class TelegramBusinessTransport:
                     "Business sendMessage не выполнен: "
                     + self.last_delivery.get("reason", "unknown")
                 )
-            self.pipeline.bird.apply_delivery(
+            self.pipeline.bird.delivery_coordinator.apply_delivery(
                 prepared, self.last_delivery["message_id"]
             )
             self.journal.complete(path.stem, self.pipeline.bird)

@@ -1,9 +1,9 @@
-"""Prepare or generate a fresh profile and diary using the latest local source."""
+"""Prepare or generate a fresh profile, Life Prompt, and diary using the latest local source."""
 
 import argparse
 from pathlib import Path
 
-from mockingbird.config import CONFIG_PATH, PROJECT_ROOT, load_config
+from mockingbird.config import CONFIG_PATH, load_config
 from mockingbird.llm.client import LLM
 from mockingbird.persona.refresh import (
     bootstrap_local_persona,
@@ -25,18 +25,21 @@ def main() -> None:
     mode.add_argument(
         "--prepare",
         action="store_true",
-        help="Save two exact requests locally; no model calls",
+        help="Save three exact requests locally; no model calls",
     )
     mode.add_argument(
         "--generate",
         action="store_true",
-        help="Make two building-model requests and replace validated artifacts",
+        help="Make three building-model requests and replace validated artifacts",
     )
     parser.add_argument(
-        "--output", type=Path, default=PROJECT_ROOT / "data/previews/persona-refresh"
+        "--output",
+        type=Path,
     )
     args = parser.parse_args()
     config = load_config(args.config)
+    if args.output is None:
+        args.output = Path(config["paths"]["runtime"]) / "previews/persona-refresh"
     if args.local:
         metadata = bootstrap_local_persona(config)
         print(

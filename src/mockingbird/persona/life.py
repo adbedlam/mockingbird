@@ -5,19 +5,55 @@ from __future__ import annotations
 import json
 import logging
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from mockingbird.llm.client import LLM
 from mockingbird.llm.message import Message, Role
 from mockingbird.persona.prompts.life import (
     LIFE_CONTEXT_INSTRUCTIONS,
+    LIFE_PROMPT_BUILD_INSTRUCTIONS,
     LIFE_UPDATE_DISABLED,
     life_update_protocol,
     prepare_life_prompt,
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class LifePrompt:
+    content: str
+
+    @classmethod
+    def from_history(cls, model: LLM, history) -> LifePrompt:
+        prompt = LIFE_PROMPT_BUILD_INSTRUCTIONS.format(
+            user=history.user,
+            other=history.other,
+        )
+        messages: list[Message] = [
+            Message(role=Role.SYSTEM, content=prompt),
+            Message(role=Role.USER, content=history.to_samples()),
+        ]
+        content = model.complete(messages)
+        if not content.strip():
+            raise ValueError("LLM returned an empty life prompt")
+        return cls(content=content.strip())
+
+    def to_llm_message(self) -> Message:
+        return Message(role=Role.SYSTEM, content=self.content)
+
+    def save(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(self.content, encoding="utf-8")
+        temporary.replace(path)
+
+    @classmethod
+    def load(cls, path: Path) -> LifePrompt:
+        return cls(content=path.read_text(encoding="utf-8"))
 
 
 class PersonaLife:
@@ -29,6 +65,7 @@ class PersonaLife:
         timezone: str,
         *,
         diary_hour: int = 23,
+        life_prompt: str = "",
     ):
         if not 0 <= diary_hour <= 23:
             raise ValueError("life.diary_hour must be between 0 and 23")
@@ -36,6 +73,7 @@ class PersonaLife:
         self.user, self.other = user, other
         self.zone = ZoneInfo(timezone)
         self.diary_hour = diary_hour
+        self.life_prompt = life_prompt
         self.days: dict[str, dict] = {}
         self.retry_at: datetime | None = None
         path = directory / "life.json"
@@ -109,7 +147,12 @@ class PersonaLife:
         return [
             Message(
                 role=Role.SYSTEM,
-                content=prepare_life_prompt(self.user, profile, now.isoformat()),
+                content=prepare_life_prompt(
+                    self.user,
+                    profile,
+                    self.life_prompt,
+                    now.isoformat(),
+                ),
             ),
             Message(
                 role=Role.USER,
@@ -306,21 +349,21 @@ class PersonaLife:
 
     @staticmethod
     def describe_change(record: dict) -> str:
-        lines = [f"План {record['date']}, версия {record['revision']}"]
+        lines = [f"Plan {record['date']}, revision {record['revision']}"]
         for edit in record["edits"]:
 
             def label(row):
                 return f"{row['start']}–{row['end']} {row['activity']}"
 
             if edit["op"] == "cancel":
-                lines.append("Отменено: " + label(edit["before"]))
+                lines.append("Cancelled: " + label(edit["before"]))
             elif edit["op"] == "add":
-                lines.append("Добавлено: " + label(edit["after"]))
+                lines.append("Added: " + label(edit["after"]))
             else:
                 lines.append(
-                    "Заменено: "
+                    "Replaced: "
                     + label(edit["before"])
-                    + " \u2192 "
+                    + " -> "
                     + label(edit["after"])
                 )
         return "\n".join(lines)
@@ -363,11 +406,11 @@ class PersonaLife:
                         events.append(
                             (
                                 "LIFE_EVENT",
-                                f"Симуляция | {row['start']}–{row['end']} | "
+                                f"Simulation | {row['start']}–{row['end']} | "
                                 + (
-                                    "завершено"
+                                    "completed"
                                     if row["status"] == "completed"
-                                    else "сейчас"
+                                    else "current"
                                 )
                                 + f" | {row['activity']}",
                             )
@@ -379,7 +422,7 @@ class PersonaLife:
             ):
                 done = [r["activity"] for r in rows if r["status"] == "completed"]
                 text = (
-                    "сегодня " + "; ".join(done) if done else "пока законченных дел нет"
+                    "today " + "; ".join(done) if done else "no completed activities yet"
                 )
                 # One record per calendar date; checkpoints update it instead of duplicating it.
                 if day.get("diary", {}).get("content") != text:
@@ -392,7 +435,7 @@ class PersonaLife:
                     events.append(
                         (
                             "DAILY_DIARY",
-                            f"{key} | Симулированный день, запись сохранена: {text}",
+                            f"{key} | Simulated day, diary entry saved: {text}",
                         )
                     )
         if changed:
@@ -429,31 +472,31 @@ class PersonaLife:
     def view(self, now: datetime) -> str:
         day = self.days.get(self.local(now).date().isoformat())
         if day is None:
-            return "План смоделированного дня пока не составлен"
-        labels = {"completed": "завершено", "current": "сейчас", "planned": "впереди"}
+            return "The simulated-day plan has not been created yet"
+        labels = {"completed": "completed", "current": "current", "planned": "planned"}
         return (
-            f"Смоделированный день {day['date']} — {self.user}, версия {day['revision']}\n"
+            f"Simulated day {day['date']} — {self.user}, revision {day['revision']}\n"
             + "\n".join(
                 f"{row['id']} | {row['start']}–{row['end']} | {labels[row['status']]} | {row['activity']}"
                 for row in self.rows(day, now)
             )
-            + f"\nПояснение выбора: {day['reason']}"
+            + f"\nChoice reason: {day['reason']}"
             + (
-                "\nПоследняя правка:\n" + self.describe_change(day["changes"][-1])
+                "\nLatest change:\n" + self.describe_change(day["changes"][-1])
                 if day["changes"]
                 else ""
             )
-            + f"\nДневник: {self.directory / 'daily_diary.md'}"
+            + f"\nDiary: {self.directory / 'daily_diary.md'}"
         )
 
     def diary_view(self) -> str:
         return (
             "\n\n".join(
-                f"{key} | [СИМУЛЯЦИЯ]\n{day['diary']['content']}"
+                f"{key} | [SIMULATION]\n{day['diary']['content']}"
                 for key, day in sorted(self.days.items())
                 if "diary" in day
             )
-            or "Записей симулированных дней пока нет"
+            or "No simulated-day diary entries yet"
         )
 
     def save(self) -> None:
@@ -477,7 +520,7 @@ class PersonaLife:
         temporary.replace(target)
         try:
             (self.directory / "daily_diary.md").write_text(
-                "# Дневник смоделированных дней\n\nЭто вымышленные события роли, а не факты из Telegram.\n\n"
+                "# Simulated-day diary\n\nThese are fictional role-play events, not facts from Telegram.\n\n"
                 + self.diary_view(),
                 encoding="utf-8",
             )
@@ -490,11 +533,11 @@ class PersonaLife:
                 for record in day["changes"]
             ]
             (self.directory / "plan_changes.md").write_text(
-                "# Изменения смоделированного плана\n\n"
+                "# Simulated-plan changes\n\n"
                 + "\n\n".join(
                     f"## {record['at']}\n\n{self.describe_change(record)}\n\n"
-                    f"Причина: {record['reason']}\n\n"
-                    f"Входящее: {record['source']['text']}\n\nОтвет: {record['reply']}"
+                    f"Reason: {record['reason']}\n\n"
+                    f"Incoming: {record['source']['text']}\n\nReply: {record['reply']}"
                     for record in records
                 ),
                 encoding="utf-8",

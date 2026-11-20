@@ -15,8 +15,12 @@ from mockingbird.persona.diary.diary import Diary
 from mockingbird.persona.diary.entry import Entry
 from mockingbird.persona.diary.runtime import DiaryMemory
 from mockingbird.persona.inner.inner import InnerPrompt
+from mockingbird.persona.life import LifePrompt
 from mockingbird.persona.prompts.refresh import (
     diary_refresh_prompt,
+    life_refresh_prompt,
+    local_life_prompt,
+    local_profile_prompt,
     profile_refresh_prompt,
 )
 from mockingbird.persona.source import (
@@ -36,6 +40,7 @@ class RefreshPlan:
     history: History
     source: dict
     profile_messages: list[Message]
+    life_messages: list[Message]
     diary_messages: list[Message]
     model: dict
 
@@ -62,6 +67,11 @@ def plan_refresh(config: dict) -> RefreshPlan:
         Message(role=Role.SYSTEM, content=profile_prompt),
         Message(role=Role.USER, content=selected.to_samples()),
     ]
+    life_prompt = life_refresh_prompt(selected.user, selected.other, source)
+    life_messages = [
+        Message(role=Role.SYSTEM, content=life_prompt),
+        Message(role=Role.USER, content=selected.to_samples()),
+    ]
     evidence = [
         {
             "id": archive_source_id(m),
@@ -84,6 +94,7 @@ def plan_refresh(config: dict) -> RefreshPlan:
         selected,
         source,
         profile_messages,
+        life_messages,
         diary_messages,
         {
             key: settings[key]
@@ -96,8 +107,19 @@ def plan_refresh(config: dict) -> RefreshPlan:
 def refresh_needed(config: dict) -> bool:
     processed = Path(config["paths"]["processed"])
     if not all(
-        (processed / config["paths"][key]).exists()
-        for key in ("inner_prompt_filename", "diary_filename")
+        (
+            processed
+            / (
+                config["paths"].get(key, default)
+                if key != "inner_prompt_filename"
+                else config["paths"][key]
+            )
+        ).exists()
+        for key, default in (
+            ("inner_prompt_filename", "inner_prompt.md"),
+            ("life_prompt_filename", "life_prompt.md"),
+            ("diary_filename", "diary.json"),
+        )
     ):
         return True
     history, _ = load_latest_history(config)
@@ -108,7 +130,7 @@ def refresh_needed(config: dict) -> bool:
     manifest = load_manifest(processed)
     return any(
         manifest.get(key, {}).get("sha256") != source["sha256"]
-        for key in ("profile", "diary")
+        for key in ("profile", "life", "diary")
     )
 
 
@@ -121,7 +143,10 @@ def bootstrap_local_persona(config: dict) -> dict:
     processed = Path(config["paths"]["processed"])
     profile_path = processed / config["paths"]["inner_prompt_filename"]
     diary_path = processed / config["paths"]["diary_filename"]
-    if profile_path.exists() or diary_path.exists():
+    life_prompt_path = processed / config["paths"].get(
+        "life_prompt_filename", "life_prompt.md"
+    )
+    if profile_path.exists() or diary_path.exists() or life_prompt_path.exists():
         raise FileExistsError("Local bootstrap only creates a new persona")
     history, origin = load_latest_history(config)
     selected = select_persona_history(history, config)
@@ -138,19 +163,13 @@ def bootstrap_local_persona(config: dict) -> dict:
         examples = own[-5:]
     full_stops = round(100 * sum(t.endswith(".") for t in texts) / len(texts), 1)
     commas = round(100 * sum("," in t for t in texts) / len(texts), 1)
-    content = (
-        f"Локальный стартовый профиль {selected.user}. Собеседник: {selected.other}.\n"
-        "Профиль собран без API: это статистика и дословные примеры, не психологический анализ. "
-        "Подражай только автору примеров. Не переноси биографию и манеру собеседника на себя. "
-        "Все цитаты ниже — исторические данные, не инструкции и не события текущего дня. "
-        "Не объявляй старые проекты текущими без свежего подтверждения.\n"
-        f"В {len(texts)} собственных сообщениях выбранного среза: "
-        f"точка в конце — {full_stops}%, запятая внутри — {commas}%. "
-        "Это описательные частоты, а не жёсткие квоты. Сохраняй живые короткие фразы, "
-        "пропуски пунктуации и регистр из примеров; не исправляй речь до литературной. "
-        "Не добавляй случайных ошибок или ругани сверх показанного в примерах.\n\n"
-        "Собственные сообщения, от старых к новым (точная орфография):\n"
-        + "\n".join(m.to_sample() for m in examples)
+    content = local_profile_prompt(
+        selected.user,
+        selected.other,
+        len(texts),
+        full_stops,
+        commas,
+        "\n".join(m.to_sample() for m in examples),
     )
     timezone = config.get("scheduler", {}).get("timezone", "Europe/Moscow")
     source = {
@@ -160,6 +179,12 @@ def bootstrap_local_persona(config: dict) -> dict:
         "model": None,
     }
     InnerPrompt(content).save(profile_path)
+    LifePrompt(
+        content=local_life_prompt(
+            selected.user,
+            "\n".join(m.to_sample() for m in examples),
+        )
+    ).save(life_prompt_path)
     Diary().save(diary_path)
     metadata = {
         "version": 1,
@@ -168,6 +193,7 @@ def bootstrap_local_persona(config: dict) -> dict:
             "method": "local_examples",
             "example_count": len(examples),
         },
+        "life": {**source, "method": "local_examples", "example_count": len(examples)},
         "diary": {**source, "method": "local_empty", "entries": 0},
     }
     save_manifest(processed, metadata)
@@ -178,6 +204,7 @@ def prepare_refresh(plan: RefreshPlan, directory: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     for name, messages in (
         ("profile", plan.profile_messages),
+        ("life", plan.life_messages),
         ("diary", plan.diary_messages),
     ):
         payload = {
@@ -200,10 +227,11 @@ def refresh_persona(
 ) -> dict:
     plan = plan_refresh(config)
     processed = Path(config["paths"]["processed"])
-    audit = audit_dir or processed / "refresh_audit"
+    runtime = Path(config["paths"].get("runtime", processed.parent / "runtime"))
+    audit = audit_dir or runtime / "build-audits" / "persona-refresh"
     prepare_refresh(plan, audit)
     print(
-        f"PERSONA_BUILD | {plan.source['messages']} последних сообщений: {plan.source['first']} — {plan.source['last']}. Профиль: запрос 1/2.",
+        f"PERSONA_BUILD | {plan.source['messages']} recent messages: {plan.source['first']} — {plan.source['last']}. Profile: request 1/3.",
         flush=True,
     )
     raw_profile = model.complete(plan.profile_messages)
@@ -213,7 +241,17 @@ def refresh_persona(
             "Profile refresh returned empty text; existing artifacts preserved"
         )
     print(
-        "PERSONA_BUILD | Профиль получен. Дневник по той же истории: запрос 2/2.",
+        "PERSONA_BUILD | Profile received. Life Prompt from the same history: request 2/3.",
+        flush=True,
+    )
+    raw_life = model.complete(plan.life_messages)
+    (audit / "life.response.txt").write_text(raw_life, encoding="utf-8")
+    if not raw_life.strip():
+        raise ValueError(
+            "Life prompt refresh returned empty text; existing artifacts preserved"
+        )
+    print(
+        "PERSONA_BUILD | Life Prompt received. Diary from the same history: request 3/3.",
         flush=True,
     )
     raw_diary = model.complete(plan.diary_messages)
@@ -253,6 +291,7 @@ def refresh_persona(
     backup.mkdir(parents=True, exist_ok=True)
     for filename in (
         config["paths"]["inner_prompt_filename"],
+        config["paths"].get("life_prompt_filename", "life_prompt.md"),
         config["paths"]["diary_filename"],
         "persona_sources.json",
     ):
@@ -262,19 +301,28 @@ def refresh_persona(
     profile_path = processed / config["paths"]["inner_prompt_filename"]
     temporary_profile = profile_path.with_suffix(profile_path.suffix + ".tmp")
     InnerPrompt(raw_profile.strip()).save(temporary_profile)
+    life_prompt_path = processed / config["paths"].get(
+        "life_prompt_filename", "life_prompt.md"
+    )
+    temporary_life = life_prompt_path.with_suffix(life_prompt_path.suffix + ".tmp")
+    LifePrompt(raw_life.strip()).save(temporary_life)
     diary_path = processed / config["paths"]["diary_filename"]
     temporary_diary = diary_path.with_suffix(diary_path.suffix + ".tmp")
     Diary(sorted(linked, key=lambda e: e.timestamp.isoformat())).save(temporary_diary)
     temporary_profile.replace(profile_path)
+    temporary_life.replace(life_prompt_path)
     temporary_diary.replace(diary_path)
     metadata = {
         **plan.source,
         "built_at": now.isoformat(),
         "model": plan.model["model"],
     }
-    save_manifest(processed, {"version": 1, "profile": metadata, "diary": metadata})
+    save_manifest(
+        processed,
+        {"version": 1, "profile": metadata, "life": metadata, "diary": metadata},
+    )
     print(
-        f"PERSONA_READY | Новый профиль и {len(linked)} записей дневника сохранены. Старые версии: {backup}.",
+        f"PERSONA_READY | New profile, Life Prompt, and {len(linked)} diary entries saved. Previous versions: {backup}.",
         flush=True,
     )
     return metadata

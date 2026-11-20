@@ -28,7 +28,7 @@ uv run mockingbird --fast-replies
 
 The first command imports the export and saves the conversation history. It runs locally when image descriptions are disabled. The second initializes a new persona with examples copied from the archive and an empty diary, without calling a model. The third starts the chat and calls the configured inference model for replies. Omit `--fast-replies` to use the scheduler's reply delays.
 
-Run `uv run python -m mockingbird.mockingbird.build` to build the complete persona with the configured models, or select stages with `--history`, `--inner-prompt`, and `--diary`. The default output directory is `data/processed/`. Use `uv run python scripts/refresh_persona.py --prepare` to save the refresh requests locally for inspection without sending them. Use `uv run mockingbird --refresh-persona` to rebuild the profile and diary before opening the chat. Set `persona_build.auto_refresh_on_start` to enable automatic refresh when the source changes.
+Run `uv run python -m mockingbird.mockingbird.build` to build the complete persona with the configured models, or select stages with `--history`, `--inner-prompt`, `--life-prompt`, and `--diary`. Build artifacts go to `data/processed/`; persistent chat, memory, dashboard, and preview state go to `data/runtime/`. Use `uv run python scripts/refresh_persona.py --prepare` to save the three refresh requests locally for inspection without sending them. Use `uv run mockingbird --refresh-persona` to rebuild the profile, Life Prompt, and diary before opening the chat. Set `persona_build.auto_refresh_on_start` to enable automatic refresh when the source changes.
 
 In the local terminal, use `/status`, `/context`, `/memory`, `/diary`, `/life`, and `/quit` to inspect or stop the session.
 
@@ -91,7 +91,7 @@ uv run python scripts/preview_scheduler.py --days 7 --seed 7
 uv run python scripts/preview_memory_search.py
 ```
 
-On Windows, you can also launch the dashboard with `start_dashboard.cmd`. The two preview commands above run without model calls. [Scripts](scripts/) also contains tools for persona refresh, diary updates, daily plans, and plan changes. Each script lists its options with `--help`. Preview output goes to `data/previews/` by default.
+On Windows, you can also launch the dashboard with `start_dashboard.cmd`. The two preview commands above run without model calls. [Scripts](scripts/) also contains tools for persona refresh, diary updates, daily plans, and plan changes. Each script lists its options with `--help`. Preview output goes to `data/runtime/previews/` by default.
 
 ## Development
 

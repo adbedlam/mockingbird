@@ -67,7 +67,7 @@ class CommandRouter:
             )
         elif command == "/memory" or command.startswith("/memory "):
             query = command[len("/memory") :].strip()
-            selected = context.bird.select_memory(context.clock(), query or None)
+            selected = context.bird.memory_query.select(context.clock(), query or None)
             context.emit(
                 "MEMORY_SEARCH",
                 f"Локальный поиск: выбрано {len(selected.hits)} из {selected.considered} актуальных записей; {selected.chars}/{selected.max_chars} символов. Запрос: {selected.query or 'текущий разговор'}",

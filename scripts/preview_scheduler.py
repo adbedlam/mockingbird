@@ -1,7 +1,7 @@
 """Accelerated scheduler rehearsal; --generate calls the configured LLM.
 
 Nothing is sent to a messenger. All state is isolated in memory, and reports
-are written under data/previews (or --output), never over the main diary.
+are written under data/runtime/previews (or --output), never over the main diary.
 """
 
 from __future__ import annotations
@@ -11,9 +11,10 @@ import json
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
-from mockingbird.config import CONFIG_PATH, PROJECT_ROOT, load_config
+from mockingbird.config import CONFIG_PATH, load_config
 from mockingbird.llm.message import Message
-from mockingbird.mockingbird.mockingbird import Draft, Mockingbird
+from mockingbird.mockingbird.draft import Draft
+from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.scheduler.scheduler import Action, MessageKind
 
 
@@ -86,7 +87,6 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        default=PROJECT_ROOT / "data/previews/scheduler-preview.md",
     )
     args = parser.parse_args()
     if not 1 <= args.days <= 365 or args.reply_after < 1 or args.max_generations < 1:
@@ -94,6 +94,8 @@ def main() -> None:
             "days must be 1..365, reply-after and max-generations must be positive"
         )
     config = load_config(args.config)
+    if args.output is None:
+        args.output = Path(config["paths"]["runtime"]) / "previews/scheduler-preview.md"
     bird = Mockingbird.from_config(
         config, args.seed, None if args.generate else NoModel(), memory_enabled=False
     )
@@ -180,7 +182,7 @@ def main() -> None:
                             "body": {
                                 "model": settings["model"],
                                 "temperature": settings.get("temperature", 0.7),
-                                "messages": bird.context(decision, now),
+                                "messages": bird.context_builder.build(decision, now),
                             },
                         },
                         ensure_ascii=False,

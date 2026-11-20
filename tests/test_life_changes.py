@@ -8,7 +8,7 @@ from test_life import life_for, plan
 from test_pipeline import Clock, Model, bird_for, pump
 
 from mockingbird.chat.pipeline import ChatPipeline
-from mockingbird.mockingbird.mockingbird import Mockingbird
+from mockingbird.mockingbird.draft import parse_draft
 from mockingbird.scheduler.scheduler import MessageKind
 
 
@@ -69,7 +69,7 @@ def test_agreed_change_preserves_past_current_and_updates_diary_restart_context(
     restored.advance(now.replace(hour=23))
     assert "потестировал проект" in restored.diary_view()
     assert "погулял" not in restored.diary_view()
-    assert "Входящее:" in (life.directory / "plan_changes.md").read_text(
+    assert "Incoming:" in (life.directory / "plan_changes.md").read_text(
         encoding="utf-8"
     )
     with pytest.raises(ValueError, match="stale"):
@@ -146,7 +146,7 @@ def test_cancel_all_future_activities_can_leave_an_empty_day(tmp_path):
     assert restored.days["2026-11-17"]["activities"] == []
     assert not restored.needed(earlier)
     restored.advance(now.replace(hour=23))
-    assert "законченных дел нет" in restored.diary_view()
+    assert "no completed activities yet" in restored.diary_view()
 
 
 def test_old_life_state_migrates_ids_and_event_markers_without_repeating_events(
@@ -192,7 +192,9 @@ def change_reply(pipeline):
             "send": True,
             "text": "давай вечером потестим проект",
             "reason": "соглашаюсь",
-            "life_update": replacement(pipeline.bird.pending_incoming()[-1]["id"]),
+            "life_update": replacement(
+                pipeline.bird.memory_query.pending_incoming()[-1]["id"]
+            ),
         }
     )
 
@@ -221,7 +223,9 @@ def test_pipeline_change_and_followup_context_use_one_reply_call_each(tmp_path):
     clock.now += timedelta(seconds=5)
     pump(pipeline, lambda: sum(e.stage == "OUTPUT" for e in events) == 2)
     state = next(
-        m["content"] for m in model.calls[-1] if m["content"].startswith("РАЗРЕШЁННАЯ")
+        m["content"]
+        for m in model.calls[-1]
+        if m["content"].startswith("PERMITTED DAY SIMULATION")
     )
     assert '"revision": 1' in state
     assert "потестировал проект" in state
@@ -289,10 +293,10 @@ def test_failed_plan_save_keeps_reply_pending_and_no_acceptance_output(
 
 def test_plain_reply_and_skipped_initiative_cannot_implicitly_change_life(tmp_path):
     life, now, _ = setup_life(tmp_path)
-    draft = Mockingbird.parse_draft("давай вечером поиграем", MessageKind.REPLY)
+    draft = parse_draft("давай вечером поиграем", MessageKind.REPLY)
     assert draft.life_update is None
     with pytest.raises(ValueError, match="Only a sent reply"):
-        Mockingbird.parse_draft(
+        parse_draft(
             json.dumps(
                 {
                     "send": False,

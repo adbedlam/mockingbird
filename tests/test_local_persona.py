@@ -9,7 +9,9 @@ import pytest
 import yaml
 from config_helpers import scheduler_settings
 
+from mockingbird.config import PROJECT_ROOT, load_config
 from mockingbird.conversation.history import History
+from mockingbird.conversation.identity import pair_id
 from mockingbird.conversation.message import Message
 from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.persona.refresh import bootstrap_local_persona
@@ -44,6 +46,19 @@ def config_for(tmp_path):
         "life": {"enabled": True},
         "diary": {"enabled": False},
     }
+
+
+def test_runtime_and_memory_paths_default_under_runtime(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        yaml.safe_dump({"paths": {"raw": "data/raw", "processed": "data/processed"}}),
+        encoding="utf-8",
+    )
+
+    paths = load_config(config_path)["paths"]
+
+    assert paths["runtime"] == PROJECT_ROOT / "data" / "runtime"
+    assert paths["memory"] == paths["runtime"] / "memory"
 
 
 def test_local_profile_uses_only_target_examples_without_api_and_keeps_diary_empty(
@@ -127,5 +142,12 @@ def test_offline_preview_cli_and_runtime_life_directory(tmp_path):
     bird = Mockingbird.from_config(config, model=Offline())
     assert bird.life is not None
     assert bird.life.user == "Nikita"
+    assert bird.life.directory == (
+        Path(config["paths"]["processed"]).parent
+        / "runtime"
+        / "memory"
+        / pair_id("Nikita", "Vanya")
+        / "life"
+    )
     assert bird.memory is None
     assert not bird.life.directory.exists()

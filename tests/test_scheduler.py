@@ -8,7 +8,8 @@ from config_helpers import scheduler_settings
 
 from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message
-from mockingbird.mockingbird.mockingbird import Draft, Mockingbird
+from mockingbird.mockingbird.draft import Draft
+from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.persona.diary.diary import Diary
 from mockingbird.persona.inner.inner import InnerPrompt
 from mockingbird.scheduler.observations import conversation_bursts
@@ -295,11 +296,11 @@ def test_runtime_restart_keeps_incoming_and_reply(
         history, InnerPrompt("Style"), Diary(), Scheduler(profile, 7), FakeModel("")
     )
     bird.receive("Привет", at())
-    bird.save(tmp_path)
+    bird.runtime_store.save(tmp_path)
     restored = Mockingbird(
         history, InnerPrompt("Style"), Diary(), Scheduler(profile), FakeModel("")
     )
-    restored.restore(tmp_path)
+    restored.runtime_store.restore(tmp_path)
     assert restored.live.messages == bird.live.messages
     assert restored.scheduler.reply_due == bird.scheduler.reply_due
 

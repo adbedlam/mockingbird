@@ -14,7 +14,7 @@ from typing import BinaryIO
 from mockingbird.chat.events import PipelineEvent
 from mockingbird.chat.pipeline import ChatPipeline
 from mockingbird.chat.presenter import reason_label
-from mockingbird.config import CONFIG_PATH, PROJECT_ROOT, load_config
+from mockingbird.config import CONFIG_PATH, load_config
 from mockingbird.conversation.identity import pair_id
 from mockingbird.llm.client import LLM
 from mockingbird.mockingbird.mockingbird import Mockingbird
@@ -144,7 +144,7 @@ def main() -> None:
     refresh_flags.add_argument(
         "--refresh-persona",
         action="store_true",
-        help="Два запроса к building_model: обновить профиль и начальный дневник по последним сообщениям; старые версии сохраняются",
+        help="Three building_model requests: rebuild profile, Life Prompt, and initial diary from recent messages; previous versions are saved",
     )
     refresh_flags.add_argument(
         "--no-refresh-persona",
@@ -173,21 +173,21 @@ def main() -> None:
         if args.fast_replies:
             config.setdefault("scheduler", {})["reply_mode"] = "immediate"
         identity = pair_id(config["user"], config["other"])
-        base = PROJECT_ROOT / "data/runtime"
+        paths = config["paths"]
+        processed = Path(paths["processed"])
+        runtime = Path(paths.get("runtime", processed.parent / "runtime"))
+        memory_root = Path(paths.get("memory", runtime / "memory"))
+        base = runtime
         if config.get("scheduler", {}).get("reply_mode") == "immediate":
             base /= "fast-replies"
         directory = args.state_dir or base / identity
         startup_generations = 0
         with ExitStack() as locks:
             locks.enter_context(SessionLock(directory))
-            processed = Path(config["paths"]["processed"])
             if config.get("diary", {}).get("enabled", True) or config.get(
                 "life", {}
             ).get("enabled", False):
-                memory_directory = (
-                    Path(config["paths"].get("memory", processed.parent / "memory"))
-                    / identity
-                )
+                memory_directory = memory_root / identity
                 locks.enter_context(SessionLock(memory_directory))
             should_refresh = args.refresh_persona or (
                 not args.no_refresh_persona
@@ -195,9 +195,9 @@ def main() -> None:
                 and refresh_needed(config)
             )
             if should_refresh:
-                if args.max_generations is not None and args.max_generations < 2:
+                if args.max_generations is not None and args.max_generations < 3:
                     raise ValueError(
-                        "Пересборка личности требует два запроса. Лимит слишком мал; используй --no-refresh-persona или --max-generations не меньше 2."
+                        "Persona refresh requires three requests. Limit is too low; use --no-refresh-persona or --max-generations of at least 3."
                     )
                 settings = config["building_model"]
                 with SessionLock(processed):
@@ -210,13 +210,11 @@ def main() -> None:
                             settings.get("temperature", 0.3),
                         ),
                     )
-                startup_generations = 2
+                startup_generations = 3
             bird = Mockingbird.from_config(config, args.seed)
-            bird.restore(directory)
+            bird.runtime_store.restore(directory)
             if bird.memory is not None:
-                imported = bird.memory.import_sessions(
-                    bird.memory.directory.parent.parent / "runtime"
-                )
+                imported = bird.memory.import_sessions(runtime)
                 bird.memory.render()
                 bird.diary = bird.memory.combined()
                 print(

@@ -6,7 +6,9 @@ import pytest
 from test_pipeline import Clock, Model, bird_for, pump
 
 from mockingbird.chat.pipeline import ChatPipeline
-from mockingbird.persona.life import PersonaLife
+from mockingbird.conversation.history import History
+from mockingbird.conversation.message import Message as ConversationMessage
+from mockingbird.persona.life import LifePrompt, PersonaLife
 
 
 def plan(day="2026-11-17"):
@@ -32,6 +34,39 @@ def life_for(tmp_path):
     return PersonaLife(tmp_path / "life", "Persona", "Partner", "Europe/Moscow")
 
 
+def test_life_prompt_is_built_from_history_and_used_by_plan_request(tmp_path):
+    class BuildingModel:
+        def __init__(self):
+            self.calls = []
+
+        def complete(self, messages):
+            self.calls.append(messages)
+            return "Grounded Life Prompt: use recurring project and walking interests."
+
+    history = History(
+        "Persona",
+        "Partner",
+        [
+            ConversationMessage(
+                "Persona",
+                datetime(2026, 11, 17, 10),
+                "I have been improving my project",
+            )
+        ],
+    )
+    model = BuildingModel()
+    prompt = LifePrompt.from_history(model, history)
+
+    assert "improving my project" in model.calls[0][1]["content"]
+    assert "simulated day" in model.calls[0][0]["content"]
+
+    life = life_for(tmp_path)
+    life.life_prompt = prompt.content
+    messages = life.prepare(Clock().now, "INNER PROFILE")
+    assert "Grounded Life Prompt" in messages[0]["content"]
+    assert "INNER PROFILE" in messages[0]["content"]
+
+
 def test_life_plan_has_completed_current_and_future_and_separate_origin(tmp_path):
     life = life_for(tmp_path)
     now = Clock().now.replace(hour=13)
@@ -39,7 +74,7 @@ def test_life_plan_has_completed_current_and_future_and_separate_origin(tmp_path
     rows = life.rows(life.days["2026-11-17"], now)
     assert [r["status"] for r in rows] == ["completed", "current", "planned"]
     assert life.days["2026-11-17"]["origin"] == "simulated"
-    assert "вымышленные" in life.context(now)
+    assert "fictional" in life.context(now)
     assert not life.needed(now)
 
 
@@ -146,7 +181,7 @@ def test_pipeline_plans_before_reply_input_does_not_invalidate_plan_and_logs_dia
     assert len(model.calls) == 2
     assert not any(e.stage in ("DISCARD", "SUPERSEDED") for e in events)
     state = next(
-        m["content"] for m in model.calls[1] if "РАЗРЕШЁННАЯ СИМУЛЯЦИЯ" in m["content"]
+        m["content"] for m in model.calls[1] if "PERMITTED DAY SIMULATION" in m["content"]
     )
     assert "разобрал файлы проекта" in state
     assert '"status": "planned"' in state

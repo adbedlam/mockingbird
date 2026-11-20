@@ -173,7 +173,7 @@ def test_older_evidence_cannot_reopen_a_newer_closed_task(tmp_path):
     assert result.skipped == 1 and result.updated == 0
     assert memory.combined().entries[0] == entry
     assert not memory.pending
-    assert "Источник старше" in result.changes[0]["reason"]
+    assert "older than the current version" in result.changes[0]["reason"]
 
 
 def test_conflicting_claims_stay_uncertain_and_keep_previous_fact(tmp_path):
@@ -485,7 +485,7 @@ def test_reply_context_contains_latest_state_not_superseded_pending_memory(tmp_p
     )
     bird = bird_for(Model())
     bird.memory, bird.diary = memory, memory.combined()
-    context = bird.context(
+    context = bird.context_builder.build(
         bird.scheduler.tick(NOW + timedelta(seconds=20)), NOW + timedelta(seconds=20)
     )
     diary_message = next(

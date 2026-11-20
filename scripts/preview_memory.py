@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from mockingbird.config import CONFIG_PATH, PROJECT_ROOT, load_config
+from mockingbird.config import CONFIG_PATH, load_config
 from mockingbird.conversation.message import Message
 from mockingbird.llm.client import LLM
 from mockingbird.persona.diary.diary import Diary
@@ -39,9 +39,9 @@ def main() -> None:
     if start.tzinfo is None:
         parser.error("--at needs a timezone offset")
     start = start.astimezone(zone)
-    output = args.output or PROJECT_ROOT / "data/previews/memory" / datetime.now(
-        zone
-    ).strftime("%Y%m%d-%H%M%S-%f")
+    output = args.output or Path(
+        config["paths"]["runtime"]
+    ) / "previews/memory" / datetime.now(zone).strftime("%Y%m%d-%H%M%S-%f")
     if output.exists() and not args.resume:
         parser.error("Choose a new output directory; old previews are preserved")
     if args.resume and not output.exists():

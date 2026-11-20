@@ -36,7 +36,7 @@ def test_real_terminal_input_status_context_and_unicode_output(
             )
             payload = payloads[-1]
             if payload["messages"][0]["content"].startswith(
-                "Ты планируешь ВЫМЫШЛЕННЫЙ"
+                "You are planning the FICTIONAL"
             ):
                 day = json.loads(payload["messages"][1]["content"])["date"]
                 raw = json.dumps(

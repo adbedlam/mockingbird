@@ -13,7 +13,7 @@ from contextlib import ExitStack
 from pathlib import Path
 
 from mockingbird.chat.pipeline import ChatPipeline
-from mockingbird.config import CONFIG_PATH, ENV_PATH, PROJECT_ROOT, load_config
+from mockingbird.config import CONFIG_PATH, ENV_PATH, load_config
 from mockingbird.conversation.identity import pair_id
 from mockingbird.interfaces.telegram.business import (
     BotAPIError,
@@ -214,11 +214,9 @@ def main() -> None:
                 "Разрешённый чат должен совпадать с other_id выбранной персоны."
             )
         identity = pair_id(config["user"], config["other"])
-        directory = args.state_dir or PROJECT_ROOT / "data/runtime/business" / identity
-        processed = Path(config["paths"]["processed"])
-        memory = (
-            Path(config["paths"].get("memory", processed.parent / "memory")) / identity
-        )
+        runtime = Path(config["paths"]["runtime"])
+        directory = args.state_dir or runtime / "business" / identity
+        memory = Path(config["paths"]["memory"]) / identity
         with ExitStack() as stack:
             stack.enter_context(SessionLock(directory))
             journal = BusinessJournal(directory, (owner, peer))
@@ -310,9 +308,9 @@ def main() -> None:
                 config.setdefault("scheduler", {})["reply_mode"] = "immediate"
             bird = Mockingbird.from_config(config)
             if journal.get("state"):
-                bird.load_snapshot(journal.get("state"))
+                bird.runtime_store.load_snapshot(journal.get("state"))
             else:
-                bird.restore(directory)
+                bird.runtime_store.restore(directory)
             pipeline = ChatPipeline(
                 bird,
                 directory,

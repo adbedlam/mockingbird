@@ -10,7 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from mockingbird.config import CONFIG_PATH, PROJECT_ROOT, load_config
+from mockingbird.config import CONFIG_PATH, load_config
+from mockingbird.mockingbird.draft import parse_draft
 from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.persona.life import PersonaLife
 from mockingbird.scheduler.profile import BehaviorProfile
@@ -38,9 +39,9 @@ def main() -> None:
             "--at needs a timezone offset, for example 2026-11-17T13:00:00+03:00"
         )
     now = now.astimezone(zone)
-    output = args.output or PROJECT_ROOT / "data/previews/life" / datetime.now(
-        zone
-    ).strftime("%Y%m%d-%H%M%S-%f")
+    output = args.output or Path(
+        config["paths"]["runtime"]
+    ) / "previews/life" / datetime.now(zone).strftime("%Y%m%d-%H%M%S-%f")
     if (output / "life" / "life.json").exists():
         parser.error(
             "This preview already has a plan; choose another --output directory"
@@ -57,7 +58,13 @@ def main() -> None:
     config_reply = dict(bird.scheduler.config)
     config_reply["reply_mode"] = "immediate"
     bird.scheduler = Scheduler(BehaviorProfile(bird.history, config_reply), 7)
-    life = PersonaLife(output / "life", bird.history.user, bird.history.other, zone.key)
+    life = PersonaLife(
+        output / "life",
+        bird.history.user,
+        bird.history.other,
+        zone.key,
+        life_prompt=bird.life_prompt.content,
+    )
     bird.life = life
     messages = life.prepare(now, bird.inner_prompt.content)
     output.mkdir(parents=True, exist_ok=True)
@@ -104,7 +111,7 @@ def main() -> None:
         due = bird.scheduler.reply_due
         assert due is not None
         decision = bird.scheduler.tick(due)
-        reply_messages = bird.context(decision, due)
+        reply_messages = bird.context_builder.build(decision, due)
         reply_path = output / "reply.request.json"
         reply_path.write_text(
             json.dumps(
@@ -116,7 +123,7 @@ def main() -> None:
         )
         raw_reply = bird.model.complete(reply_messages)
         (output / "reply.response.txt").write_text(raw_reply, encoding="utf-8")
-        draft = bird.parse_draft(raw_reply, decision.kind)
+        draft = parse_draft(raw_reply, decision.kind)
         report.append(
             f"\n## Ответ\n\nВходящее: {args.message}\n\n{draft.text}\n\nПояснение: {draft.reason}"
         )

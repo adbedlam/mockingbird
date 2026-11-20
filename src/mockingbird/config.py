@@ -72,9 +72,10 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
     )
     config.setdefault("vision_model", {})["api_key"] = os.getenv("VISION_MODEL_API_KEY")
 
-    for key in ("raw", "processed", "memory"):
-        if key == "memory" and key not in config["paths"]:
-            continue
+    paths = config.setdefault("paths", {})
+    paths.setdefault("runtime", str(Path(paths["processed"]).parent / "runtime"))
+    paths.setdefault("memory", str(Path(paths["runtime"]) / "memory"))
+    for key in ("raw", "processed", "runtime", "memory"):
         value = Path(config["paths"][key])
         if not value.is_absolute():
             value = PROJECT_ROOT / value

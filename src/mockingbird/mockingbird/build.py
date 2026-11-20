@@ -7,6 +7,7 @@ from mockingbird.conversation.history import History
 from mockingbird.llm.client import LLM
 from mockingbird.persona.diary.diary import Diary
 from mockingbird.persona.inner.inner import InnerPrompt
+from mockingbird.persona.life import LifePrompt
 from mockingbird.persona.source import (
     load_manifest,
     save_manifest,
@@ -78,6 +79,21 @@ def _build_inner_prompt(config: dict, history: History) -> InnerPrompt:
     return InnerPrompt.from_history(model, history)
 
 
+def _build_life_prompt(config: dict, history: History) -> LifePrompt:
+    history = select_persona_history(history, config)
+    logger.info("Building life prompt")
+
+    building_config = config["building_model"]
+    model = LLM(
+        building_config["host"],
+        building_config["model"],
+        building_config["api_key"],
+        building_config["temperature"],
+    )
+
+    return LifePrompt.from_history(model, history)
+
+
 def _build_diary(config: dict, history: History) -> Diary:
     history = select_persona_history(history, config)
     logger.info("Building diary")
@@ -111,6 +127,9 @@ def build() -> None:
     parser.add_argument(
         "--inner-prompt", action="store_true", help="Build inner prompt"
     )
+    parser.add_argument(
+        "--life-prompt", action="store_true", help="Build life prompt"
+    )
     parser.add_argument("--diary", action="store_true", help="Build diary")
 
     args = parser.parse_args()
@@ -127,7 +146,7 @@ def build() -> None:
         logger.info("Building history")
         history = _build_history(config)
         history.save(history_path)
-    elif args.inner_prompt or args.diary:
+    elif args.inner_prompt or args.life_prompt or args.diary:
         logger.info("Loading history")
         history = History.load(history_path)
 
@@ -138,6 +157,20 @@ def build() -> None:
         inner_prompt.save(inner_prompt_path)
         manifest = load_manifest(output_dir)
         manifest["profile"] = History.history_info(
+            select_persona_history(history, config),
+            config.get("scheduler", {}).get("timezone", "Europe/Moscow"),
+        )
+        save_manifest(output_dir, manifest)
+
+    life_prompt_path = output_dir / config["paths"].get(
+        "life_prompt_filename", "life_prompt.md"
+    )
+    if args.life_prompt or build_all:
+        logger.info("Building life prompt")
+        life_prompt = _build_life_prompt(config, history)
+        life_prompt.save(life_prompt_path)
+        manifest = load_manifest(output_dir)
+        manifest["life"] = History.history_info(
             select_persona_history(history, config),
             config.get("scheduler", {}).get("timezone", "Europe/Moscow"),
         )

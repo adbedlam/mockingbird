@@ -32,7 +32,8 @@ from mockingbird.chat.tasks import (
     ReplyTask,
     RequestTask,
 )
-from mockingbird.mockingbird.mockingbird import Draft, Mockingbird
+from mockingbird.mockingbird.draft import Draft, parse_draft
+from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.observability import start_run
 from mockingbird.scheduler.scheduler import Action, Decision
 
@@ -196,7 +197,7 @@ class ChatPipeline:
         self.requests.update(pending.path, **changes)
 
     def _begin(self, decision: Decision, now: datetime) -> None:
-        messages = self.bird.context(decision, now)
+        messages = self.bird.context_builder.build(decision, now)
         self._launch(
             messages,
             now,
@@ -339,7 +340,7 @@ class ChatPipeline:
         try:
             if result.error:
                 raise RuntimeError(result.error)
-            draft = self.bird.parse_draft(result.raw, decision.kind)
+            draft = parse_draft(result.raw, decision.kind)
             changing_plan = draft.life_update is not None
             if self.delivery is not None and draft.send:
                 life_change = self.delivery(decision, draft, now, pending.path)

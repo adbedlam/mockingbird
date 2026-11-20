@@ -34,7 +34,7 @@ def test_isolated_change_preview_cli_prepare_or_two_local_http_replies(
                 protocol = next(
                     m["content"]
                     for m in messages
-                    if m["content"].startswith("ИЗМЕНЕНИЯ ПЛАНА")
+                    if m["content"].startswith("PLAN CHANGES FROM DIALOGUE")
                 )
                 incoming = json.loads(protocol.rsplit("\n", 1)[1])
                 reply = {
@@ -152,7 +152,7 @@ def test_isolated_change_preview_cli_prepare_or_two_local_http_replies(
             state = next(
                 m["content"]
                 for m in payloads[1]["messages"]
-                if m["content"].startswith("РАЗРЕШЁННАЯ")
+                if m["content"].startswith("PERMITTED DAY SIMULATION")
             )
             assert '"revision": 1' in state
         else:

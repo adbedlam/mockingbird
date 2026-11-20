@@ -12,7 +12,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from mockingbird.chat.pipeline import ChatPipeline
-from mockingbird.config import CONFIG_PATH, PROJECT_ROOT, load_config
+from mockingbird.config import CONFIG_PATH, load_config
 from mockingbird.interfaces.terminal import render
 from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.persona.life import PersonaLife
@@ -43,9 +43,9 @@ def main() -> None:
     if now.tzinfo is None:
         parser.error("--at requires a timezone offset")
     now = now.astimezone(zone)
-    output = args.output or PROJECT_ROOT / "data/previews/life-changes" / datetime.now(
-        zone
-    ).strftime("%Y%m%d-%H%M%S-%f")
+    output = args.output or Path(
+        config["paths"]["runtime"]
+    ) / "previews/life-changes" / datetime.now(zone).strftime("%Y%m%d-%H%M%S-%f")
     if output.exists():
         parser.error("Choose a new output directory; existing previews are preserved")
     config.setdefault("scheduler", {}).update(
@@ -62,7 +62,13 @@ def main() -> None:
     life_dir = output / "life"
     life_dir.mkdir(parents=True)
     (life_dir / "life.json").write_bytes(args.plan.read_bytes())
-    life = PersonaLife(life_dir, bird.history.user, bird.history.other, zone.key)
+    life = PersonaLife(
+        life_dir,
+        bird.history.user,
+        bird.history.other,
+        zone.key,
+        life_prompt=bird.life_prompt.content,
+    )
     if now.date().isoformat() not in life.days:
         parser.error(
             "The copied plan has no day for --at; use its date or another plan"
@@ -72,7 +78,7 @@ def main() -> None:
         bird.receive(args.message, now)
         due = bird.scheduler.reply_due
         assert due is not None
-        messages = bird.context(bird.scheduler.tick(due), due)
+        messages = bird.context_builder.build(bird.scheduler.tick(due), due)
         settings = config["inference_model"]
         request = {
             "method": "POST",

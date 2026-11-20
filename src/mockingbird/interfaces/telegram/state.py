@@ -62,7 +62,7 @@ class DeliveryJournal:
 
     def save_state(self, bird: Mockingbird, paused: bool) -> None:
         with self.db:
-            self._set("state", bird.snapshot())
+            self._set("state", bird.runtime_store.snapshot())
             self._set("paused", paused)
 
     def prepare(self, identity: str, text: str, payload: dict) -> int:
@@ -105,7 +105,7 @@ class DeliveryJournal:
     def complete(self, identity: str, bird: Mockingbird) -> None:
         # Commit the acknowledged post-send state and outbox marker together.
         with self.db:
-            self._set("state", bird.snapshot())
+            self._set("state", bird.runtime_store.snapshot())
             self.db.execute(
                 "UPDATE outbox SET status='applied' WHERE id=?", (identity,)
             )

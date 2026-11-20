@@ -5,13 +5,13 @@ import pytest
 
 from mockingbird.llm.client import LLM
 from mockingbird.llm.message import Message, Role
-from mockingbird.mockingbird.mockingbird import Mockingbird
+from mockingbird.mockingbird.draft import parse_draft
 from mockingbird.scheduler.scheduler import MessageKind
 
 
 def test_plain_reply_is_usable_without_inventing_model_reason():
     text = "Пока никто не писал, собес в среду. Завод отказал, сказали полиграф не прошёл \U0001f643"
-    draft = Mockingbird.parse_draft(text, MessageKind.REPLY)
+    draft = parse_draft(text, MessageKind.REPLY)
     assert draft.send
     assert draft.text == text
     assert draft.reason == ""
@@ -21,7 +21,7 @@ def test_plain_reply_is_usable_without_inventing_model_reason():
 @pytest.mark.parametrize("kind", [MessageKind.INITIATIVE, None])
 def test_plain_text_never_implies_an_initiative_decision(kind):
     with pytest.raises(ValueError):
-        Mockingbird.parse_draft("Привет, есть минутка?", kind)
+        parse_draft("Привет, есть минутка?", kind)
 
 
 @pytest.mark.parametrize(
@@ -38,7 +38,7 @@ def test_plain_text_never_implies_an_initiative_decision(kind):
 )
 def test_invalid_structured_output_is_not_sent_as_chat_text(raw):
     with pytest.raises(ValueError):
-        Mockingbird.parse_draft(raw, MessageKind.REPLY)
+        parse_draft(raw, MessageKind.REPLY)
 
 
 def test_valid_json_fences_and_bom_are_supported():
@@ -47,14 +47,14 @@ def test_valid_json_fences_and_bom_are_supported():
         + json.dumps({"send": True, "text": "Привет", "reason": "Отвечаю"})
         + "\n```"
     )
-    draft = Mockingbird.parse_draft(raw, MessageKind.REPLY)
+    draft = parse_draft(raw, MessageKind.REPLY)
     assert draft.format == "json"
     assert draft.reason == "Отвечаю"
 
 
 def test_plain_code_reply_keeps_its_code_fences():
     raw = "```python\nprint(1)\n```"
-    draft = Mockingbird.parse_draft(raw, MessageKind.REPLY)
+    draft = parse_draft(raw, MessageKind.REPLY)
     assert draft.text == raw
     assert draft.format == "plain_reply"
 

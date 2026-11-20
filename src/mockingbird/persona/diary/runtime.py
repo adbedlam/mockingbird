@@ -538,9 +538,9 @@ class DiaryMemory:
                     content, state, topic = old.content, old.state, old.topic
                 elif collision is not None:
                     old, op, state = collision, "dispute", "uncertain"
-                    content = f"Раньше я помнил: {old.content}\nНовые сведения: {content}\nПока нужно уточнить, это изменение или противоречие"
+                    content = f"I previously remembered: {old.content}\nNew information: {content}\nThis needs clarification: is it a change or a contradiction?"
                     reason = (
-                        "Новая запись использует существующий ключ факта; сохранены обе версии для уточнения. "
+                        "The new entry uses an existing fact key; both versions are preserved for clarification. "
                         + reason
                     )
                     reason_scope = "application"
@@ -556,7 +556,7 @@ class DiaryMemory:
                 if at < self.local(old.timestamp):
                     skip(
                         ids,
-                        "Источник старше актуальной версии; состояние не изменено",
+                        "The source is older than the current version; state unchanged",
                         identity,
                     )
                     continue
@@ -611,7 +611,7 @@ class DiaryMemory:
             if omitted:
                 skip(
                     omitted,
-                    "Для этих входящих модель не выделила отдельного устойчивого воспоминания",
+                    "The model did not identify a separate durable memory for these incoming messages",
                 )
         # All validation completes before changing the accepted state.
         before = (
@@ -706,36 +706,36 @@ class DiaryMemory:
     def render(self) -> None:
         self.directory.mkdir(parents=True, exist_ok=True)
         lines = [
-            f"# Дневник {self.user}",
+            f"# Diary for {self.user}",
             "",
-            "Старые записи сохраняют свои даты. Новые воспоминания основаны на входящих сообщениях собеседника.",
+            "Older entries retain their dates. New memories are based on incoming messages from the partner.",
             "",
         ]
         for entry in self.combined().entries:
             labels = {
-                "fact": "сведение",
-                "planned": "в планах",
-                "completed": "завершено",
-                "cancelled": "отменено",
-                "uncertain": "нужно уточнить",
+                "fact": "fact",
+                "planned": "planned",
+                "completed": "completed",
+                "cancelled": "cancelled",
+                "uncertain": "needs clarification",
             }
             lines.extend(
                 [
                     f"## {entry.timestamp.isoformat()} | {entry.memory_id} v{entry.revision}",
                     "",
-                    f"Состояние: {labels[entry.state]}; о ком: {entry.subject}; тема: {entry.topic or 'не размечена'}.",
+                    f"State: {labels[entry.state]}; subject: {entry.subject}; topic: {entry.topic or 'unclassified'}.",
                     "",
                     entry.content,
                     "",
                 ]
             )
             if entry.source_ids:
-                lines.extend(["Источники: " + ", ".join(entry.source_ids), ""])
+                lines.extend(["Sources: " + ", ".join(entry.source_ids), ""])
         (self.directory / "diary.md").write_text("\n".join(lines), encoding="utf-8")
         audit = [
-            "# Обновления дневника",
+            "# Diary updates",
             "",
-            f"В очереди: {len(self.pending)} входящих; автоматический порог: {self.update_every}.",
+            f"Queue: {len(self.pending)} incoming messages; automatic threshold: {self.update_every}.",
             "",
         ]
         for update in self.updates:
@@ -743,25 +743,25 @@ class DiaryMemory:
                 [
                     f"## {update['at']}",
                     "",
-                    f"Добавлено: {update['added']}; уточнено: {update.get('updated', 0)}; подтверждено: {update.get('confirmed', 0)}; спорно: {update.get('disputed', 0)}; пропущено: {update.get('skipped', 0)}. {update['reason']}",
+                    f"Added: {update['added']}; updated: {update.get('updated', 0)}; confirmed: {update.get('confirmed', 0)}; disputed: {update.get('disputed', 0)}; skipped: {update.get('skipped', 0)}. {update['reason']}",
                     "",
-                    "Источники: " + ", ".join(update["source_ids"]),
+                    "Sources: " + ", ".join(update["source_ids"]),
                     "",
                 ]
             )
             for change in update.get("changes", []):
                 audit.extend(
                     [
-                        f"- {change['action']} | {change.get('target_id') or 'без записи'} | {change['reason']}"
+                        f"- {change['action']} | {change.get('target_id') or 'no entry'} | {change['reason']}"
                     ]
                 )
         (self.directory / "diary_updates.md").write_text(
             "\n".join(audit), encoding="utf-8"
         )
         history = [
-            f"# История воспоминаний {self.user}",
+            f"# Memory history for {self.user}",
             "",
-            "Прежние версии сохранены для проверки. В ответ модели передаётся только актуальная версия.",
+            "Previous versions are preserved for review. Only the current version is passed to the model.",
             "",
         ]
         for entry in self.combined().entries:
@@ -773,7 +773,7 @@ class DiaryMemory:
                         "",
                         version.content,
                         "",
-                        "Источники: " + ", ".join(version.source_ids),
+                        "Sources: " + ", ".join(version.source_ids),
                         "",
                     ]
                 )

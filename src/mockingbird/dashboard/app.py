@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 
-from mockingbird.config import CONFIG_PATH, PROJECT_ROOT, load_config
+from mockingbird.config import CONFIG_PATH, load_config
 from mockingbird.conversation.identity import pair_id
 from mockingbird.observability import redact
 
@@ -274,7 +274,9 @@ def dashboard_key(path: Path) -> str:
         key = path.read_text(encoding="utf-8").strip()
         if len(key) >= 24 and all(char.isalnum() or char in "-_" for char in key):
             return key
-        raise ValueError("Dashboard access key is invalid; check data/dashboard")
+        raise ValueError(
+            "Dashboard access key is invalid; check data/runtime/dashboard"
+        )
     key = secrets.token_urlsafe(24)
     with path.open("x", encoding="utf-8") as stream:
         stream.write(key)
@@ -313,9 +315,10 @@ def main() -> None:
     config = load_config(args.config)
     identity = pair_id(config["user"], config["other"])
     processed = Path(config["paths"]["processed"])
-    memory = Path(config["paths"].get("memory", processed.parent / "memory")) / identity
+    memory = Path(config["paths"]["memory"]) / identity
+    runtime = Path(config["paths"]["runtime"])
     data = DashboardData(
-        PROJECT_ROOT / "data/runtime",
+        runtime,
         memory,
         processed,
         identity,
@@ -324,7 +327,7 @@ def main() -> None:
     )
     if not 1 <= args.port <= 65535:
         parser.error("Порт должен быть от 1 до 65535")
-    local_state = PROJECT_ROOT / "data/dashboard"
+    local_state = runtime / "dashboard"
     key = dashboard_key(local_state / f"access-{args.port}.key")
     url = f"http://127.0.0.1:{args.port}/?key={key}"
     active = running_dashboard(args.port, key, identity)

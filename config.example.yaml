@@ -77,6 +77,9 @@ scheduler:
 paths:
   raw: data/raw
   processed: data/processed
+  runtime: data/runtime
+  memory: data/runtime/memory
   history_filename: history.json
   inner_prompt_filename: inner_prompt.md
+  life_prompt_filename: life_prompt.md
   diary_filename: diary.json

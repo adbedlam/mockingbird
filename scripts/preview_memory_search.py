@@ -19,7 +19,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        default=PROJECT_ROOT / "data/previews/memory-search/report.md",
+        default=PROJECT_ROOT / "data/runtime/previews/memory-search/report.md",
     )
     args = parser.parse_args()
     now = datetime(2026, 11, 18, 13, tzinfo=ZoneInfo("Europe/Moscow"))
