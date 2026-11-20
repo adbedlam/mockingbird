@@ -13,9 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mockingbird = "mockingbird.mockingbird:main"
-mockingbird-telegram = "mockingbird.interfaces.telegram.business:main"
-mockingbird-business = "mockingbird.interfaces.telegram.cli:main"
+mockingbird = "mockingbird.entrypoint:main"
 mockingbird-dashboard = "mockingbird.dashboard.app:main"
 
 [build-system]

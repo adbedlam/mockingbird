@@ -23,12 +23,12 @@ Local configs, keys, chat exports, generated artifacts, and runtime state are ke
 ```powershell
 uv run python -m mockingbird.mockingbird.build --history
 uv run python scripts/refresh_persona.py --local
-uv run mockingbird --fast-replies
+uv run mockingbird --interface cli --fast-replies
 ```
 
 The first command imports the export and saves the conversation history. It runs locally when image descriptions are disabled. The second initializes a new persona with examples copied from the archive and an empty diary, without calling a model. The third starts the chat and calls the configured inference model for replies. Omit `--fast-replies` to use the scheduler's reply delays.
 
-Run `uv run python -m mockingbird.mockingbird.build` to build the complete persona with the configured models, or select stages with `--history`, `--inner-prompt`, `--life-prompt`, and `--diary`. Build artifacts go to `data/processed/`; persistent chat, memory, dashboard, and preview state go to `data/runtime/`. Use `uv run python scripts/refresh_persona.py --prepare` to save the three refresh requests locally for inspection without sending them. Use `uv run mockingbird --refresh-persona` to rebuild the profile, Life Prompt, and diary before opening the chat. Set `persona_build.auto_refresh_on_start` to enable automatic refresh when the source changes.
+Run `uv run python -m mockingbird.mockingbird.build` to build the complete persona with the configured models, or select stages with `--history`, `--inner-prompt`, `--life-prompt`, and `--diary`. Build artifacts go to `data/processed/`; persistent chat, memory, dashboard, and preview state go to `data/runtime/`. Use `uv run python scripts/refresh_persona.py --prepare` to save the three refresh requests locally for inspection without sending them. Use `uv run mockingbird --interface cli --refresh-persona` to rebuild the profile, Life Prompt, and diary before opening the chat. Set `persona_build.auto_refresh_on_start` to enable automatic refresh when the source changes.
 
 In the local terminal, use `/status`, `/context`, `/memory`, `/diary`, `/life`, and `/quit` to inspect or stop the session.
 
@@ -49,11 +49,11 @@ The build stage turns an export into conversation history, a persona prompt, and
 ### Runtime and interfaces
 
 - [Scheduler](src/mockingbird/scheduler/) estimates active hours, response delays, and initiation patterns from history. Its runtime uses those patterns and current state to decide whether to wait, reply, or start a conversation.
-- [Agent](src/mockingbird/mockingbird/mockingbird.py) combines the profile, recent conversation, selected memories, and current activity into model context. It parses generated drafts and updates conversation state when delivery is recorded.
+- [Mockingbird session](src/mockingbird/mockingbird/mockingbird.py) owns the current conversation and domain operations. [ContextBuilder](src/mockingbird/mockingbird/context.py), [MemoryQuery](src/mockingbird/mockingbird/memory.py), and [RuntimeStore](src/mockingbird/mockingbird/runtime.py) handle context assembly, memory selection, and runtime persistence.
 - [Prompts](src/mockingbird/prompts/) holds shared instructions for how the agent should express itself in the conversation.
 - [Model client](src/mockingbird/llm/) defines the structure of model messages and sends completion requests to an OpenAI-compatible endpoint.
 - [Chat pipeline](src/mockingbird/chat/) connects the scheduler, agent, and delivery interface. It tracks pending work, coordinates model calls, and publishes events for the terminal and runtime logs.
-- [Interfaces](src/mockingbird/interfaces/) adapt the pipeline to local terminal and Telegram Business sessions. The [terminal interface](src/mockingbird/interfaces/terminal.py) handles local commands and displays pipeline events. [Telegram Business](src/mockingbird/interfaces/telegram/) receives updates, checks who can receive messages, and delivers replies through the Bot API; its `business.py`, `cli.py`, and `state.py` modules contain transport, operator commands, and durable state. `mockingbird-telegram` is an alias for `mockingbird-business`.
+- [Interfaces](src/mockingbird/interfaces/) adapt the pipeline to local terminal and Telegram Business sessions. The single `mockingbird` command selects an interface with `--interface cli` or `--interface telegram`; interface modules provide runners and do not parse command-line arguments or define executable entry points. Telegram operator commands are selected after `--interface telegram`.
 - [Observability](src/mockingbird/observability.py) writes per-run logs, redacts secrets in formatted output, and packages diagnostics for export. These local files can contain conversation data.
 - [Dashboard](src/mockingbird/dashboard/) serves a read-only localhost view of connection status, scheduling decisions, delivery history, diary entries, and model requests using its bundled [HTML interface](src/mockingbird/dashboard/dashboard.html).
 
@@ -62,8 +62,8 @@ The build stage turns an export into conversation history, a persona prompt, and
 Connect the bot in Telegram Business and grant it access to the intended private chat and permission to reply. Put the bot token in `TELEGRAM_BOT_TOKEN` in `.env`. In `config.yaml`, set `telegram_business.bot_username`, the account owner's `preprocessing.user_id`, and the partner's `preprocessing.other_id`. Set `telegram_business.allowed_chat_ids` to a list containing that same partner ID. Start with `PERSONA_SEND_ENABLED=false`.
 
 ```powershell
-uv run mockingbird-business observe --seconds 60
-uv run mockingbird-business status --live
+uv run mockingbird --interface telegram observe --seconds 60
+uv run mockingbird --interface telegram status --live
 ```
 
 Ask the partner to message the account owner while `observe` is running. This command reads updates without calling a model or sending messages. When it discovers the connection, it saves `TELEGRAM_BUSINESS_CONNECTION_ID` to `.env`. If the ID is unknown and no event arrives, reconnect the bot while observation is running. Use one polling process per bot token. Before sending a test, check the connection owner, reply permission, and verified recipient in the status output.
@@ -72,15 +72,15 @@ Prepare a test with the actual chat ID. Once the account owner has approved the 
 
 ```powershell
 $recipientId = Read-Host "Recipient chat ID"
-uv run mockingbird-business prepare-test --recipient $recipientId --text "Mockingbird test"
+uv run mockingbird --interface telegram prepare-test --recipient $recipientId --text "Mockingbird test"
 $approvalId = Read-Host "Approval ID"
-uv run mockingbird-business send-test --approval-id $approvalId --confirm-text "Mockingbird test"
+uv run mockingbird --interface telegram send-test --approval-id $approvalId --confirm-text "Mockingbird test"
 $messageId = Read-Host "Delivered message ID"
-uv run mockingbird-business confirm-appearance --message-id $messageId
-uv run mockingbird-business run --fast-replies
+uv run mockingbird --interface telegram confirm-appearance --message-id $messageId
+uv run mockingbird --interface telegram run --fast-replies
 ```
 
-Enter `/pause`, `/resume`, `/status`, `/delivery`, and `/quit` in the local operator terminal. An outgoing message written by the account owner pauses the agent by default. Before delivery, the transport checks reply permission and whether the chat received a message within the last 24 hours. If a delivery outcome is unknown, check the chat before recording the result with `mockingbird-business resolve-delivery`. Use `mockingbird-business export` to save the journal and diagnostics.
+Enter `/pause`, `/resume`, `/status`, `/delivery`, and `/quit` in the local operator terminal. An outgoing message written by the account owner pauses the agent by default. Before delivery, the transport checks reply permission and whether the chat received a message within the last 24 hours. If a delivery outcome is unknown, check the chat before recording the result with `mockingbird --interface telegram resolve-delivery`. Use `mockingbird --interface telegram export` to save the journal and diagnostics.
 
 ## Dashboard and previews
 

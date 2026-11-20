@@ -58,6 +58,6 @@ class EventRecorder:
                 )
             if "request_path" in data:
                 stream.write(
-                    "\nКонтекст и сырой ответ: " + str(data["request_path"]) + "\n"
+                    "\nContext and raw response: " + str(data["request_path"]) + "\n"
                 )
         self.on_event(event)

@@ -300,9 +300,7 @@ def test_confirmed_send_recovers_without_new_send(business, monkeypatch):
     pipeline.step()
     pump(pipeline, lambda: pipeline.delivery_blocked)
     assert transport.journal.unresolved()[0]["status"] == "sent"
-    monkeypatch.setattr(
-        pipeline.bird.delivery_coordinator, "apply_delivery", apply
-    )
+    monkeypatch.setattr(pipeline.bird.delivery_coordinator, "apply_delivery", apply)
     transport.recover()
     transport.recover()
     assert not transport.journal.unresolved()

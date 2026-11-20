@@ -181,7 +181,9 @@ def test_pipeline_plans_before_reply_input_does_not_invalidate_plan_and_logs_dia
     assert len(model.calls) == 2
     assert not any(e.stage in ("DISCARD", "SUPERSEDED") for e in events)
     state = next(
-        m["content"] for m in model.calls[1] if "PERMITTED DAY SIMULATION" in m["content"]
+        m["content"]
+        for m in model.calls[1]
+        if "PERMITTED DAY SIMULATION" in m["content"]
     )
     assert "разобрал файлы проекта" in state
     assert '"status": "planned"' in state

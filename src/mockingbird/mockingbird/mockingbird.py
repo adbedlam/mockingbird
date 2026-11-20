@@ -47,6 +47,7 @@ class Mockingbird:
         *,
         memory: DiaryMemory | None = None,
         life: PersonaLife | None = None,
+        life_prompt: LifePrompt,
         archive_max_age_days: int = 365,
         memory_max_age_days: int = 365,
         memory_search: MemorySearchConfig | None = None,
@@ -55,7 +56,7 @@ class Mockingbird:
             raise ValueError("Context limits must be positive")
         self.history = history
         self.inner_prompt = inner_prompt
-        self.life_prompt = LifePrompt(content="")
+        self.life_prompt = life_prompt
         self.diary = diary
         self.scheduler = scheduler
         self.model = model
@@ -212,11 +213,11 @@ class Mockingbird:
                 if memory_enabled and config.get("life", {}).get("enabled", False)
                 else None
             ),
+            life_prompt=life_prompt,
             archive_max_age_days=context_settings.get("archive_max_age_days", 365),
             memory_max_age_days=context_settings.get("memory_max_age_days", 365),
             memory_search=search_config,
         )
-        bird.life_prompt = life_prompt
         bird.source_origin = origin
         bird.source_info = History.history_info(history, profile.config["timezone"])
         bird.persona_sources = load_manifest(processed)
@@ -288,13 +289,3 @@ class Mockingbird:
         else:
             self.scheduler.decline(decision)
         return change
-
-
-def main() -> None:
-    from mockingbird.interfaces.terminal import main as terminal_main
-
-    terminal_main()
-
-
-if __name__ == "__main__":
-    main()

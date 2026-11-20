@@ -419,19 +419,22 @@ def test_history_zero_limit_does_not_expand_to_whole_archive(config: dict):
 def test_automatic_refresh_respects_total_request_budget(
     config: dict, tmp_path: Path, monkeypatch, capsys
 ):
-    from mockingbird.interfaces import terminal
+    from mockingbird import entrypoint
+    from mockingbird.interfaces.terminal import interface
 
     config["persona_build"]["auto_refresh_on_start"] = True
-    monkeypatch.setattr(terminal, "load_config", lambda path: config)
+    monkeypatch.setattr(entrypoint, "load_config", lambda path: config)
 
     def forbidden(*args, **kwargs):
         raise AssertionError("No refresh allowed under a one-request budget")
 
-    monkeypatch.setattr(terminal, "refresh_persona", forbidden)
+    monkeypatch.setattr(interface, "refresh_persona", forbidden)
     monkeypatch.setattr(
         "sys.argv",
         [
             "mockingbird",
+            "--interface",
+            "cli",
             "--state-dir",
             str(tmp_path / "runtime"),
             "--max-generations",
@@ -439,6 +442,6 @@ def test_automatic_refresh_respects_total_request_budget(
         ],
     )
     with pytest.raises(SystemExit) as exc:
-        terminal.main()
+        entrypoint.main()
     assert exc.value.code == 1
     assert "three requests" in capsys.readouterr().err

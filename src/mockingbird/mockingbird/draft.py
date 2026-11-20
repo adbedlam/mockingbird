@@ -25,8 +25,7 @@ def parse_draft(raw: str, kind: MessageKind | None) -> Draft:
         r"```(?:json)?\s*(.*?)\s*```", raw, flags=re.DOTALL | re.IGNORECASE
     )
     if fence and (
-        raw.lower().startswith("```json")
-        or fence[1].lstrip().startswith(("{", "["))
+        raw.lower().startswith("```json") or fence[1].lstrip().startswith(("{", "["))
     ):
         candidate = fence[1].strip()
     try:
@@ -43,11 +42,7 @@ def parse_draft(raw: str, kind: MessageKind | None) -> Draft:
     if not isinstance(data, dict) or type(data.get("send")) is not bool:
         raise ValueError("Expected a structured send decision")
     text, reason = data.get("text"), data.get("reason")
-    if (
-        not isinstance(text, str)
-        or not isinstance(reason, str)
-        or not reason.strip()
-    ):
+    if not isinstance(text, str) or not isinstance(reason, str) or not reason.strip():
         raise ValueError("Expected text and a visible decision note")
     if data["send"] and not text.strip():
         raise ValueError("Cannot send an empty message")
@@ -55,9 +50,7 @@ def parse_draft(raw: str, kind: MessageKind | None) -> Draft:
         raise ValueError("A reply cannot be silently declined")
     update = data.get("life_update")
     if update is not None and (
-        not isinstance(update, dict)
-        or not data["send"]
-        or kind != MessageKind.REPLY
+        not isinstance(update, dict) or not data["send"] or kind != MessageKind.REPLY
     ):
         raise ValueError("Only a sent reply can include a structured life update")
     return Draft(data["send"], text.strip(), reason.strip(), life_update=update)

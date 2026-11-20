@@ -1,5 +1,3 @@
-"""Official Telegram Bot API Business transport. No user-account API or MTProto."""
-
 from __future__ import annotations
 
 import asyncio
@@ -629,9 +627,7 @@ class TelegramBusinessTransport:
         pending.pop(self.message_key(message), None)
         with self.journal.db:
             if self.pipeline:
-                self.journal._set(
-                    "state", self.pipeline.bird.runtime_store.snapshot()
-                )
+                self.journal._set("state", self.pipeline.bird.runtime_store.snapshot())
             self.journal._set("pending_messages", pending)
 
     async def restore_messages(self) -> None:
@@ -944,13 +940,3 @@ class TelegramBusinessTransport:
         }
         self.journal.set("test_approval", approval)
         return approval
-
-
-def main() -> None:
-    from mockingbird.interfaces.telegram.cli import main as cli_main
-
-    cli_main()
-
-
-if __name__ == "__main__":
-    main()

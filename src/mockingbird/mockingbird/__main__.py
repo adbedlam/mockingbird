@@ -1,4 +1,4 @@
-from mockingbird.mockingbird.mockingbird import main
+from mockingbird.entrypoint import main
 
 if __name__ == "__main__":
     main()

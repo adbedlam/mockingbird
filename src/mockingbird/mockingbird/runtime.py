@@ -81,14 +81,10 @@ class RuntimeStore:
         if state.exists():
             history = self._access.history()
             pair = (history.user, history.other)
-            scheduler = Scheduler.load(
-                state, self._access.scheduler().profile, pair
-            )
+            scheduler = Scheduler.load(state, self._access.scheduler().profile, pair)
             live = History.load(history_path)
             if (live.user, live.other) != pair:
-                raise ValueError(
-                    "Live history belongs to a different participant pair"
-                )
+                raise ValueError("Live history belongs to a different participant pair")
             self._access.set_scheduler(scheduler)
             self._access.set_live(live)
             memory = self._access.memory()
@@ -109,9 +105,7 @@ class DeliveryCoordinator:
     def __init__(self, accessors: DeliveryAccessors):
         self._access = accessors
 
-    def prepare_delivery(
-        self, decision: Decision, draft: Draft, now: datetime
-    ) -> dict:
+    def prepare_delivery(self, decision: Decision, draft: Draft, now: datetime) -> dict:
         """Validate a post-send state before an external delivery attempt."""
         access = self._access
         if not draft.send or not draft.text.strip():

@@ -57,9 +57,7 @@ class MemoryQuery:
                 break
         return list(reversed(pending))
 
-    def select(
-        self, now: datetime, query: str | None = None
-    ) -> MemorySelection:
+    def select(self, now: datetime, query: str | None = None) -> MemorySelection:
         now = self._local_time(now)
         live = self._live()
         memory = self._memory()
@@ -72,9 +70,7 @@ class MemoryQuery:
             for message in live.messages
             if message.author == live.other
             and message.text
-            and now - timedelta(days=2)
-            <= self._local_time(message.timestamp)
-            <= now
+            and now - timedelta(days=2) <= self._local_time(message.timestamp) <= now
         ]
         return select_memories(
             current.entries,

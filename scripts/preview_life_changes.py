@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 from mockingbird.chat.pipeline import ChatPipeline
 from mockingbird.config import CONFIG_PATH, load_config
-from mockingbird.interfaces.terminal import render
+from mockingbird.interfaces.terminal.interface import render
 from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.persona.life import PersonaLife
 

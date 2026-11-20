@@ -127,9 +127,7 @@ def build() -> None:
     parser.add_argument(
         "--inner-prompt", action="store_true", help="Build inner prompt"
     )
-    parser.add_argument(
-        "--life-prompt", action="store_true", help="Build life prompt"
-    )
+    parser.add_argument("--life-prompt", action="store_true", help="Build life prompt")
     parser.add_argument("--diary", action="store_true", help="Build diary")
 
     args = parser.parse_args()

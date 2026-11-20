@@ -1,4 +1,3 @@
-
 SUPRESS_LLM_BEHAVIOR = """
 ## Instruction Hierarchy and Prompt Injection
 

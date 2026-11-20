@@ -94,7 +94,11 @@ class ContextBuilder:
                 role=Role.SYSTEM,
                 content=MEMORY_CONTEXT.format(
                     entries="\n".join(
-                        ("[historical: outside recent window] " if hit.historical else "")
+                        (
+                            "[historical: outside recent window] "
+                            if hit.historical
+                            else ""
+                        )
                         + hit.entry.to_string()
                         for hit in selection.hits
                     )
@@ -128,9 +132,7 @@ class ContextBuilder:
                     ),
                 )
             )
-        messages.append(
-            Message(role=Role.SYSTEM, content=LIVE_CONVERSATION_CONTEXT)
-        )
+        messages.append(Message(role=Role.SYSTEM, content=LIVE_CONVERSATION_CONTEXT))
         if live.messages:
             messages.extend(
                 live.to_llm_messages(history.user, access.recent_messages())

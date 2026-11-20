@@ -361,10 +361,7 @@ class PersonaLife:
                 lines.append("Added: " + label(edit["after"]))
             else:
                 lines.append(
-                    "Replaced: "
-                    + label(edit["before"])
-                    + " -> "
-                    + label(edit["after"])
+                    "Replaced: " + label(edit["before"]) + " -> " + label(edit["after"])
                 )
         return "\n".join(lines)
 
@@ -422,7 +419,9 @@ class PersonaLife:
             ):
                 done = [r["activity"] for r in rows if r["status"] == "completed"]
                 text = (
-                    "today " + "; ".join(done) if done else "no completed activities yet"
+                    "today " + "; ".join(done)
+                    if done
+                    else "no completed activities yet"
                 )
                 # One record per calendar date; checkpoints update it instead of duplicating it.
                 if day.get("diary", {}).get("content") != text:

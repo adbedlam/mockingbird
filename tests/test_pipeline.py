@@ -12,11 +12,12 @@ from mockingbird.chat.events import PipelineEvent
 from mockingbird.chat.pipeline import ChatPipeline
 from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message
-from mockingbird.interfaces.terminal import SessionLock
+from mockingbird.interfaces.common import SessionLock
 from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.persona.diary.diary import Diary
 from mockingbird.persona.diary.entry import Entry
 from mockingbird.persona.inner.inner import InnerPrompt
+from mockingbird.persona.life import LifePrompt
 from mockingbird.scheduler.profile import BehaviorProfile
 from mockingbird.scheduler.scheduler import Scheduler
 
@@ -82,6 +83,7 @@ def bird_for(model: Model) -> Mockingbird:
         Diary([Entry(source.messages[0].timestamp, "Synthetic memory")]),
         Scheduler(profile, 7),
         model,
+        life_prompt=LifePrompt(content=""),
     )
 
 

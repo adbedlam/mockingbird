@@ -71,8 +71,7 @@ def local_profile_prompt(
         "phrases, punctuation omissions, and casing from the examples; do not rewrite "
         "the speech into formal literary prose. Do not invent random errors or profanity "
         "not shown in the examples.\n\n"
-        "Own messages, oldest to newest (exact spelling):\n"
-        + examples
+        "Own messages, oldest to newest (exact spelling):\n" + examples
     )
 
 
@@ -85,6 +84,5 @@ def local_life_prompt(user: str, examples: str) -> str:
         "plans, or meetings. When evidence is insufficient, prefer a low-risk "
         "activity such as reading, resting, walking, cleaning, cooking, or "
         "working on an explicitly evidenced personal project.\n\n"
-        "Verbatim own-message examples:\n"
-        + examples
+        "Verbatim own-message examples:\n" + examples
     )
