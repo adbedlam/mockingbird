@@ -5,8 +5,8 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from test_memory_and_freshness import NOW, incoming
-from test_pipeline import Model, bird_for
+from tests.chat.test_pipeline import Model, bird_for
+from tests.mockingbird.test_memory_and_freshness import NOW, incoming
 
 from mockingbird.chat.chat import Chat
 from mockingbird.persona.diary.diary import Diary

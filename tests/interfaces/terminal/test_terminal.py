@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from config_helpers import scheduler_settings
+from tests.config_helpers import scheduler_settings
 
 from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message
@@ -137,7 +137,7 @@ def test_real_terminal_input_status_context_and_unicode_output(
             "--max-generations",
             "2" if with_life else "1",
         ],
-        cwd=Path(__file__).resolve().parents[1],
+        cwd=Path(__file__).resolve().parents[3],
         env=env,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,

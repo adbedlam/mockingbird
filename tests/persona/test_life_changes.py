@@ -4,8 +4,8 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from test_life import life_for, plan
-from test_pipeline import Clock, Model, bird_for, pump
+from tests.chat.test_pipeline import Clock, Model, bird_for, pump
+from tests.persona.test_life import life_for, plan
 
 from mockingbird.chat.chat import Chat
 from mockingbird.mockingbird.draft import parse_draft

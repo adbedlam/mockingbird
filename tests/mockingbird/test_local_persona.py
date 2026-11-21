@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from config_helpers import scheduler_settings
+from tests.config_helpers import scheduler_settings
 
 from mockingbird.config import PROJECT_ROOT, load_config
 from mockingbird.conversation.history import History
@@ -123,7 +123,7 @@ def test_offline_preview_cli_and_runtime_life_directory(tmp_path):
             "--replay",
             str(path),
         ],
-        cwd=Path(__file__).resolve().parents[1],
+        cwd=Path(__file__).resolve().parents[2],
         env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         capture_output=True,
         text=True,

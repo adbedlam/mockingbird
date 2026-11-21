@@ -10,8 +10,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 import yaml
-from test_life import plan
-from test_local_persona import config_for
+from tests.mockingbird.test_local_persona import config_for
+from tests.persona.test_life import plan
 
 from mockingbird.persona.life import PersonaLife
 from mockingbird.persona.refresh import bootstrap_local_persona
@@ -127,7 +127,7 @@ def test_isolated_change_preview_cli_prepare_or_two_local_http_replies(
                 "давай вместо прогулки с 18 до 19 потестим проект",
                 "--generate" if generate else "--prepare",
             ],
-            cwd=Path(__file__).resolve().parents[1],
+            cwd=Path(__file__).resolve().parents[2],
             env={
                 **os.environ,
                 "PYTHONIOENCODING": "utf-8",

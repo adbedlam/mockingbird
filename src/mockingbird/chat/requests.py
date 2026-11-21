@@ -16,7 +16,6 @@ class RequestStore:
 
     def create(
         self,
-        *,
         run_id: str,
         at: datetime,
         kind: str,

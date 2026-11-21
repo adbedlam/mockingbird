@@ -3,14 +3,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import logging
 import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-
-import httpx
 
 from mockingbird.chat.chat import Chat
 from mockingbird.chat.errors import (
@@ -20,9 +17,10 @@ from mockingbird.chat.errors import (
 )
 from mockingbird.config import save_business_connection_id
 from mockingbird.conversation.message import Message
-from mockingbird.interfaces.telegram.state import DeliveryJournal, SetupError
+from mockingbird.interfaces.telegram.api import BotAPIError, BotNetworkError
+from mockingbird.interfaces.telegram.errors import SetupError
+from mockingbird.interfaces.telegram.journal import TelegramJournal
 from mockingbird.mockingbird.draft import Draft
-from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.observability import redact
 from mockingbird.scheduler.scheduler import Decision
 
@@ -34,170 +32,11 @@ BUSINESS_UPDATES = [
 ]
 
 
-class BotAPIError(RuntimeError):
-    def __init__(self, code: int, description: str, retry_after: int = 0):
-        self.code, self.retry_after = code, retry_after
-        super().__init__(redact(description))
-
-
-class BotNetworkError(RuntimeError):
-    def __init__(self, detail: str, *, method: str = ""):
-        self.detail, self.method = detail, method
-        super().__init__(f"{method}: {detail}" if method else detail)
-
-
-class BusinessBotAPI:
-    def __init__(
-        self, token: str, *, transport: httpx.AsyncBaseTransport | None = None
-    ):
-        if not token or ":" not in token:
-            raise SetupError("Заполни TELEGRAM_BOT_TOKEN в локальном .env.")
-        self._token = token
-        # httpx INFO messages include the token-bearing Bot API URL.
-        logging.getLogger("httpx").setLevel(logging.WARNING)
-        logging.getLogger("httpcore").setLevel(logging.WARNING)
-        self.client = httpx.AsyncClient(
-            timeout=httpx.Timeout(25, connect=10),
-            follow_redirects=False,
-            transport=transport,
-        )
-
-    async def call(self, method: str, **params: Any) -> Any:
-        if method not in {
-            "getMe",
-            "getWebhookInfo",
-            "getUpdates",
-            "getBusinessConnection",
-            "sendMessage",
-        }:
-            raise ValueError("Unsupported Bot API method")
-        try:
-            response = await self.client.post(
-                f"https://api.telegram.org/bot{self._token}/{method}", json=params
-            )
-        except httpx.TransportError as exc:
-            raise BotNetworkError(type(exc).__name__, method=method) from None
-        try:
-            data = response.json()
-        except ValueError:
-            raise BotNetworkError(
-                f"InvalidJSON (HTTP {response.status_code})", method=method
-            ) from None
-        if not isinstance(data, dict):
-            raise BotNetworkError("Invalid Bot API response", method=method)
-        if data.get("ok") is not True:
-            description = str(
-                data.get("description", "Bot API rejected request")
-            ).replace(self._token, "[REDACTED]")
-            raise BotAPIError(
-                int(data.get("error_code", response.status_code)),
-                description,
-                int((data.get("parameters") or {}).get("retry_after", 0)),
-            )
-        return data.get("result")
-
-    async def close(self) -> None:
-        await self.client.aclose()
-
-
-class BusinessJournal(DeliveryJournal):
-    def __init__(self, directory: Path, identity: tuple[int, int]):
-        super().__init__(directory, identity)
-        self.db.execute(
-            "CREATE TABLE IF NOT EXISTS business_updates (id INTEGER PRIMARY KEY, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued')"
-        )
-        self.db.commit()
-
-    def queue_updates(self, updates: list[dict]) -> None:
-        # Persist before acknowledging via getUpdates(offset). An interrupted
-        # application can replay the local queue without fetching an event twice.
-        with self.db:
-            for update in updates:
-                self.db.execute(
-                    "INSERT OR IGNORE INTO business_updates(id,payload) VALUES (?,?)",
-                    (update["update_id"], json.dumps(update, ensure_ascii=False)),
-                )
-            if updates:
-                self._set(
-                    "offset",
-                    max(
-                        self.get("offset", 0),
-                        max(row["update_id"] for row in updates) + 1,
-                    ),
-                )
-
-    def queued(self) -> list[dict]:
-        return [
-            json.loads(row[0])
-            for row in self.db.execute(
-                "SELECT payload FROM business_updates WHERE status='queued' ORDER BY id"
-            )
-        ]
-
-    def applied(
-        self, update_id: int, mockingbird: Mockingbird | None, paused: bool
-    ) -> None:
-        with self.db:
-            if mockingbird is not None:
-                self._set("state", mockingbird.runtime_store.snapshot())
-            self._set("paused", paused)
-            self.db.execute(
-                "UPDATE business_updates SET status='applied' WHERE id=?", (update_id,)
-            )
-
-    def row(self, identity: str) -> dict | None:
-        row = self.db.execute("SELECT * FROM outbox WHERE id=?", (identity,)).fetchone()
-        return dict(row) if row else None
-
-    def report(self) -> None:
-        super().report()
-        self.write_status()
-
-    def write_status(self) -> None:
-        data = {
-            key: self.get(key)
-            for key in (
-                "bot",
-                "connection",
-                "last_incoming",
-                "offset",
-                "test_approval",
-                "test_receipt",
-                "appearance_verified",
-                "review_required",
-                "verified_recipient",
-                "pause_reason",
-                "poll_health",
-                "poll_health",
-                "pause_reason",
-            )
-        }
-        data["queued_updates"] = len(self.queued())
-        data["synced_at"] = datetime.now(timezone.utc).isoformat()
-        data["paused"] = self.get("paused", True)
-        data["recent_deliveries"] = [
-            dict(row)
-            for row in self.db.execute(
-                "SELECT id,status,text,message_id,error,created_at FROM outbox ORDER BY created_at DESC LIMIT 50"
-            )
-        ]
-        data["send_enabled"] = (
-            os.getenv("PERSONA_SEND_ENABLED", "false").strip().lower() == "true"
-        )
-        path = self.directory / "business_status.json"
-        temporary = path.with_suffix(".tmp")
-        temporary.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        temporary.replace(path)
-
-
-class TelegramBusinessTransport:
+class TelegramTransport:
     def __init__(
         self,
         api: Any,
-        journal: BusinessJournal,
-        *,
+        journal: TelegramJournal,
         owner_id: int,
         allowed_chat_ids: list[int],
         bot_username: str = "mockingbird_persona_bot",
@@ -662,6 +501,39 @@ class TelegramBusinessTransport:
             ):
                 await self.handle_update({"update_id": -1, "business_message": message})
 
+    def _check_send_gates(
+        self,
+        identity: str,
+        connection: dict,
+        recipient_id: int,
+        text: str,
+    ) -> str | None:
+        """Return the first blocking reason that needs no network round-trip.
+
+        All checks here are cheap, side-effect-free validations against the
+        journal and current configuration. Network-dependent gates (connection
+        refresh, ``is_enabled``, ``can_reply``, 24-hour window, test approval,
+        pause) stay in :meth:`send_message`, because they need the freshly
+        refreshed connection object or run side effects like ``poll_failed``.
+        """
+        if recipient_id not in self.allowed:
+            return "recipient_not_allowlisted"
+        if not self.send_enabled():
+            return "PERSONA_SEND_ENABLED=false"
+        if not text.strip() or len(text.encode("utf-16-le")) // 2 > 4096:
+            return "invalid_text_length"
+        if self.journal.unresolved() and any(
+            row["id"] != identity for row in self.journal.unresolved()
+        ):
+            return "previous_delivery_unresolved"
+        if self.journal.get("review_required"):
+            return "history_review_required"
+        if self.journal.get("retry_after", 0) > time.time():
+            return "telegram_retry_after"
+        if not connection.get("id"):
+            return "missing_business_connection"
+        return None
+
     async def send_message(self, recipient_id: int, text: str) -> bool:
         """Send once through Business Connection; retain every unsent intent."""
         connection = self.journal.get("connection", {})
@@ -710,22 +582,9 @@ class TelegramBusinessTransport:
             )
             return False
 
-        if recipient_id not in self.allowed:
-            return block("recipient_not_allowlisted")
-        if not self.send_enabled():
-            return block("PERSONA_SEND_ENABLED=false")
-        if not text.strip() or len(text.encode("utf-16-le")) // 2 > 4096:
-            return block("invalid_text_length")
-        if self.journal.unresolved() and any(
-            row["id"] != identity for row in self.journal.unresolved()
-        ):
-            return block("previous_delivery_unresolved")
-        if self.journal.get("review_required"):
-            return block("history_review_required")
-        if self.journal.get("retry_after", 0) > time.time():
-            return block("telegram_retry_after")
-        if not connection.get("id"):
-            return block("missing_business_connection")
+        if reason := self._check_send_gates(identity, connection, recipient_id, text):
+            return block(reason)
+
         try:
             connection = await self.refresh_connection(connection["id"])
         except Exception as exc:

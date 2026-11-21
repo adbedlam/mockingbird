@@ -1,19 +1,15 @@
-"""Durable state shared by the official Telegram Business interface."""
-
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from mockingbird.interfaces.telegram.errors import SetupError
 from mockingbird.mockingbird.mockingbird import Mockingbird
-
-
-class SetupError(RuntimeError):
-    """An error occured during setup."""
 
 
 def participant_id(value: object) -> int:
@@ -23,7 +19,7 @@ def participant_id(value: object) -> int:
     return int(text)
 
 
-class DeliveryJournal:
+class TelegramJournal:
     def __init__(self, directory: Path, identity: tuple[int, int]):
         directory.mkdir(parents=True, exist_ok=True)
         self.directory = directory
@@ -45,6 +41,10 @@ class DeliveryJournal:
                 "Папка Telegram принадлежит другому аккаунту или собеседнику."
             )
         self.set("identity", list(identity))
+        self.db.execute(
+            "CREATE TABLE IF NOT EXISTS business_updates (id INTEGER PRIMARY KEY, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued')"
+        )
+        self.db.commit()
 
     def get(self, key: str, default: Any = None) -> Any:
         row = self.db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
@@ -103,7 +103,6 @@ class DeliveryJournal:
         ]
 
     def complete(self, identity: str, mockingbird: Mockingbird) -> None:
-        # Commit the acknowledged post-send state and outbox marker together.
         with self.db:
             self._set("state", mockingbird.runtime_store.snapshot())
             self.db.execute(
@@ -118,6 +117,48 @@ class DeliveryJournal:
             ).fetchone()
             is not None
         )
+
+    def close(self) -> None:
+        self.db.close()
+
+    def queue_updates(self, updates: list[dict]) -> None:
+        with self.db:
+            for update in updates:
+                self.db.execute(
+                    "INSERT OR IGNORE INTO business_updates(id,payload) VALUES (?,?)",
+                    (update["update_id"], json.dumps(update, ensure_ascii=False)),
+                )
+            if updates:
+                self._set(
+                    "offset",
+                    max(
+                        self.get("offset", 0),
+                        max(row["update_id"] for row in updates) + 1,
+                    ),
+                )
+
+    def queued(self) -> list[dict]:
+        return [
+            json.loads(row[0])
+            for row in self.db.execute(
+                "SELECT payload FROM business_updates WHERE status='queued' ORDER BY id"
+            )
+        ]
+
+    def applied(
+        self, update_id: int, mockingbird: Mockingbird | None, paused: bool
+    ) -> None:
+        with self.db:
+            if mockingbird is not None:
+                self._set("state", mockingbird.runtime_store.snapshot())
+            self._set("paused", paused)
+            self.db.execute(
+                "UPDATE business_updates SET status='applied' WHERE id=?", (update_id,)
+            )
+
+    def row(self, identity: str) -> dict | None:
+        row = self.db.execute("SELECT * FROM outbox WHERE id=?", (identity,)).fetchone()
+        return dict(row) if row else None
 
     def report(self) -> None:
         path = self.directory / "delivery_report.json"
@@ -135,6 +176,40 @@ class DeliveryJournal:
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         temporary.replace(path)
+        self.write_status()
 
-    def close(self) -> None:
-        self.db.close()
+    def write_status(self) -> None:
+        data = {
+            key: self.get(key)
+            for key in (
+                "bot",
+                "connection",
+                "last_incoming",
+                "offset",
+                "test_approval",
+                "test_receipt",
+                "appearance_verified",
+                "review_required",
+                "verified_recipient",
+                "pause_reason",
+                "poll_health",
+            )
+        }
+        data["queued_updates"] = len(self.queued())
+        data["synced_at"] = datetime.now(timezone.utc).isoformat()
+        data["paused"] = self.get("paused", True)
+        data["recent_deliveries"] = [
+            dict(row)
+            for row in self.db.execute(
+                "SELECT id,status,text,message_id,error,created_at FROM outbox ORDER BY created_at DESC LIMIT 50"
+            )
+        ]
+        data["send_enabled"] = (
+            os.getenv("PERSONA_SEND_ENABLED", "false").strip().lower() == "true"
+        )
+        path = self.directory / "business_status.json"
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        temporary.replace(path)

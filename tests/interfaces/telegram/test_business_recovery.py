@@ -5,13 +5,13 @@ from datetime import timedelta
 
 import httpx
 import pytest
-from test_pipeline import pump
-from test_telegram_business import attach, business, incoming
+from tests.chat.test_pipeline import pump
+from tests.interfaces.telegram.test_telegram_business import attach, business, incoming
 
-from mockingbird.interfaces.telegram.business import (
+from mockingbird.interfaces.telegram.api import (
     BotAPIError,
     BotNetworkError,
-    BusinessBotAPI,
+    TelegramBotAPI,
 )
 
 
@@ -161,7 +161,7 @@ def test_network_log_includes_safe_method_and_error_without_token(monkeypatch):
         raise httpx.ConnectTimeout(f"private URL {request.url}", request=request)
 
     async def check():
-        api = BusinessBotAPI(token, transport=httpx.MockTransport(fail))
+        api = TelegramBotAPI(token, transport=httpx.MockTransport(fail))
         try:
             with pytest.raises(BotNetworkError) as caught:
                 await api.call("getUpdates")

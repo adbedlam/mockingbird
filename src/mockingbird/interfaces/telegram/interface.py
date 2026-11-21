@@ -11,23 +11,24 @@ import time
 from contextlib import ExitStack
 from pathlib import Path
 
-from mockingbird.chat.session import create_bird, create_pipeline
+from mockingbird.chat.chat import Chat
 from mockingbird.config import ENV_PATH
 from mockingbird.conversation.identity import pair_id
 from mockingbird.interfaces.common import SessionLock, render
-from mockingbird.interfaces.telegram.business import (
+from mockingbird.interfaces.telegram.api import (
     BotAPIError,
     BotNetworkError,
-    BusinessBotAPI,
-    BusinessJournal,
-    TelegramBusinessTransport,
+    TelegramBotAPI,
 )
+from mockingbird.interfaces.telegram.errors import SetupError
+from mockingbird.interfaces.telegram.journal import TelegramJournal, participant_id
 from mockingbird.interfaces.telegram.options import TelegramOptions
-from mockingbird.interfaces.telegram.state import SetupError, participant_id
+from mockingbird.interfaces.telegram.transport import TelegramTransport
+from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.observability import export_bundle
 
 
-def ready(transport: TelegramBusinessTransport) -> None:
+def ready(transport: TelegramTransport) -> None:
     if not transport.send_enabled():
         raise SetupError("PERSONA_SEND_ENABLED=false: отправки отключены.")
     receipt = transport.journal.get("test_receipt")
@@ -52,9 +53,9 @@ def ready(transport: TelegramBusinessTransport) -> None:
         raise SetupError("Ещё действует ограничение retry_after от Telegram.")
 
 
-def run_persona(transport: TelegramBusinessTransport) -> None:
+def run_persona(transport: TelegramTransport) -> None:
     assert transport.loop and transport.pipeline
-    pipeline, loop = transport.pipeline, transport.loop
+    chat, loop = transport.pipeline, transport.loop
     commands: queue.Queue[str | None] = queue.Queue()
 
     def input_worker():
@@ -80,9 +81,9 @@ def run_persona(transport: TelegramBusinessTransport) -> None:
         try:
             ready(transport)
         except SetupError as exc:
-            pipeline.paused = True
+            chat.paused = True
             transport.emit("BUSINESS_SEND_DISABLED", str(exc))
-        pipeline.start(run_step=transport.network_available)
+        chat.start(run_step=transport.network_available)
         threading.Thread(
             target=input_worker, daemon=True, name="business-commands"
         ).start()
@@ -96,7 +97,7 @@ def run_persona(transport: TelegramBusinessTransport) -> None:
                 try:
                     if text == "/resume":
                         ready(transport)
-                        pipeline.delivery_blocked = False
+                        chat.delivery_blocked = False
                     if text in ("/delivery", "/review"):
                         data = (
                             transport.journal.unresolved()
@@ -111,11 +112,11 @@ def run_persona(transport: TelegramBusinessTransport) -> None:
                     elif text.startswith("/"):
                         if text == "/export":
                             transport.journal.report()
-                        pipeline.command(text)
+                        chat.command(text)
                         if text == "/pause":
                             transport.journal.set("pause_reason", "operator")
                             transport.journal.set("auto_pause_reason", None)
-                        elif text == "/resume" and not pipeline.paused:
+                        elif text == "/resume" and not chat.paused:
                             transport.journal.set("pause_reason", None)
                         elif text == "/status":
                             transport.emit(
@@ -150,12 +151,12 @@ def run_persona(transport: TelegramBusinessTransport) -> None:
                 and not transport.journal.unresolved()
                 and not transport.backlog
             ):
-                pipeline.step()
+                chat.step()
             time.sleep(0.1)
     except KeyboardInterrupt:
         pass
     finally:
-        pipeline.close(checkpoint_life=not bool(transport.journal.unresolved()))
+        chat.close(checkpoint_life=not bool(transport.journal.unresolved()))
         transport.checkpoint()
         transport.journal.report()
 
@@ -170,172 +171,399 @@ class TelegramInterface:
 
 def _run(options: TelegramOptions, config: dict) -> None:
     try:
-        settings = config.get("telegram_business", {})
-        owner = participant_id(config["preprocessing"]["user_id"])
-        peer = participant_id(config["preprocessing"]["other_id"])
-        allowed = settings.get("allowed_chat_ids", [])
-        if allowed and allowed != [peer]:
-            raise SetupError(
-                "Разрешённый чат должен совпадать с other_id выбранной персоны."
-            )
-        identity = pair_id(config["user"], config["other"])
-        runtime = Path(config["paths"]["runtime"])
-        directory = options.state_dir or runtime / "business" / identity
-        memory = Path(config["paths"]["memory"]) / identity
-        with ExitStack() as stack:
-            stack.enter_context(SessionLock(directory))
-            journal = BusinessJournal(directory, (owner, peer))
-            stack.callback(journal.close)
-            if options.command == "export":
-                journal.report()
-                print(export_bundle(directory, memory))
-                return
-            if options.command == "status" and not options.live:
-                journal.report()
-                print((directory / "business_status.json").read_text(encoding="utf-8"))
-                return
-            if options.command == "confirm-appearance":
-                receipt = journal.get("test_receipt")
-                if not receipt or receipt["message_id"] != options.message_id:
-                    raise SetupError(
-                        "ID не совпал с подтверждённой Telegram тестовой отправкой."
-                    )
-                journal.set("appearance_verified", {**receipt, "owner_confirmed": True})
-                journal.report()
-                print(
-                    "Владелец подтвердил отображение отправителя. Можно запускать run при PERSONA_SEND_ENABLED=true."
-                )
-                return
-            loop = asyncio.new_event_loop()
-            stack.callback(loop.close)
-            api = BusinessBotAPI(os.getenv("TELEGRAM_BOT_TOKEN", ""))
-            stack.callback(lambda: loop.run_until_complete(api.close()))
-            transport = TelegramBusinessTransport(
-                api,
-                journal,
-                owner_id=owner,
-                allowed_chat_ids=allowed,
-                bot_username=settings.get("bot_username", "mockingbird_persona_bot"),
-                env_path=ENV_PATH,
-                pause_on_manual_outgoing=settings.get("pause_on_manual_outgoing", True),
-            )
-            transport.loop = loop
-            loop.run_until_complete(transport.initialize())
-            if options.command == "status":
-                loop.run_until_complete(transport.poll())
-                journal.report()
-                print((directory / "business_status.json").read_text(encoding="utf-8"))
-                return
-            if options.command == "observe":
-                if options.seconds < 1 or options.seconds > 3600:
-                    raise SetupError("Для observe задай --seconds от 1 до 3600.")
-                end = time.monotonic() + options.seconds
-                while time.monotonic() < end:
-                    loop.run_until_complete(transport.poll())
-                    time.sleep(min(2, max(0, end - time.monotonic())))
-                journal.report()
-                print("Наблюдение завершено. Модель и sendMessage не запускались.")
-                return
-            if options.command == "prepare-test":
-                assert options.recipient is not None and options.text is not None
-                loop.run_until_complete(transport.poll())
-                print(
-                    json.dumps(
-                        transport.prepare_test(options.recipient, options.text),
-                        ensure_ascii=False,
-                        indent=2,
-                    )
-                )
-                journal.report()
-                return
-            if options.command == "send-test":
-                approval = journal.get("test_approval", {})
-                if (
-                    approval.get("id") != options.approval_id
-                    or approval.get("text") != options.confirm_text
-                ):
-                    raise SetupError(
-                        "Точное подтверждение не совпало с подготовленным тестом."
-                    )
-                approval["approved"] = True
-                journal.set("test_approval", approval)
-                transport._staged = (approval["id"], {"kind": "test", **approval})
-                loop.run_until_complete(transport.poll())
-                success = loop.run_until_complete(
-                    transport.send_message(approval["recipient_id"], approval["text"])
-                )
-                journal.report()
-                print(json.dumps(transport.last_delivery, ensure_ascii=False, indent=2))
-                if not success:
-                    raise SetupError("Тест не отправлен; смотри причину выше.")
-                return
-            stack.enter_context(SessionLock(memory))
-            mockingbird = create_bird(
-                config,
-                fast_replies=(
-                    options.fast_replies if options.command == "run" else False
-                ),
-            )
-            if journal.get("state"):
-                mockingbird.runtime_store.load_snapshot(journal.get("state"))
-            else:
-                mockingbird.runtime_store.restore(directory)
-            pipeline = create_pipeline(
-                config,
-                mockingbird,
-                directory,
-                render,
-                delivery=transport.deliver,
-                state_sink=transport.checkpoint,
-                max_generations=options.max_generations,
-            )
-            transport.pipeline = pipeline
-            pipeline.paused = journal.get("paused", True)
-            if options.command == "resolve-delivery":
-                assert options.request_id is not None
-                row = journal.row(options.request_id)
-                if not row or row["status"] not in (
-                    "prepared",
-                    "sending",
-                    "unknown",
-                    "sent",
-                ):
-                    raise SetupError("Нет такой незавершённой отправки.")
-                if options.outcome == "not-sent":
-                    if row["status"] == "sent":
-                        raise SetupError(
-                            "Telegram уже подтвердил отправку; not-sent запрещён."
-                        )
-                    journal.update(
-                        options.request_id, "rejected", error="owner_verified_not_sent"
-                    )
-                else:
-                    if not options.message_id or options.message_id < 1:
-                        raise SetupError(
-                            "Нужен message-id, вручную сверенный владельцем в Telegram."
-                        )
-                    journal.update(
-                        options.request_id, "sent", message_id=options.message_id
-                    )
-                    transport.recover()
-                transport.checkpoint()
-                journal.report()
-                pipeline.close(checkpoint_life=not bool(journal.unresolved()))
-                print("Ручная сверка сохранена. Повторной отправки не было.")
-                return
-            run_persona(transport)
+        _run_live(options, config)
+
     except SetupError as exc:
         raise SystemExit(f"Business: {exc}") from exc
+
     except BotAPIError as exc:
         raise SystemExit(f"Telegram Bot API {exc.code}: {exc}") from exc
+
     except BotNetworkError as exc:
         raise SystemExit(
             f"Telegram недоступен: {exc}. Проверь сеть/VPN и повтори запуск; отправки не выполнялись."
         ) from exc
+
     except KeyboardInterrupt:
         raise SystemExit(130) from None
+
     except Exception as exc:
         # Never stringify httpx exceptions: their URL contains the bot token.
         raise SystemExit(
-            f"Business остановлен: {type(exc).__name__}. Проверь локальные логи и подключение."
+            f"Business остановлен: {type(exc).__name__}. "
+            "Проверь локальные логи и подключение."
         ) from None
+
+
+def _run_live(options: TelegramOptions, config: dict) -> None:
+    owner, peer, identity = _resolve_identity(config)
+    directory, memory_directory = _resolve_state_paths(options, config, identity)
+
+    with ExitStack() as stack:
+        stack.enter_context(SessionLock(directory))
+
+        journal = TelegramJournal(directory, (owner, peer))
+        stack.callback(journal.close)
+
+        if _handle_offline_command(options, directory, memory_directory, journal):
+            return
+
+        loop, transport = _initialize_transport(stack, config, owner, journal)
+
+        if _handle_transport_command(options, loop, transport, directory, journal):
+            return
+
+        stack.enter_context(SessionLock(memory_directory))
+
+        if options.command == "run" and options.fast_replies:
+            config.setdefault("scheduler", {})["reply_mode"] = "immediate"
+
+        chat = _create_pipeline(options, config, directory, journal, transport)
+
+        transport.pipeline = chat
+        chat.paused = journal.get("paused", True)
+
+        if options.command == "resolve-delivery":
+            _handle_resolve_delivery(options, journal, transport, chat)
+            return
+
+        run_persona(transport)
+
+
+# ---------------------------------------------------------------------
+# Configuration and paths
+# ---------------------------------------------------------------------
+
+
+def _resolve_identity(config: dict) -> tuple[int, int, str]:
+    settings = config.get("telegram_business", {})
+
+    owner = participant_id(config["preprocessing"]["user_id"])
+    peer = participant_id(config["preprocessing"]["other_id"])
+
+    allowed = settings.get("allowed_chat_ids", [])
+
+    if allowed and allowed != [peer]:
+        raise SetupError(
+            "Разрешённый чат должен совпадать с other_id выбранной персоны."
+        )
+
+    identity = pair_id(config["user"], config["other"])
+
+    return owner, peer, identity
+
+
+def _resolve_state_paths(
+    options: TelegramOptions,
+    config: dict,
+    identity: str,
+) -> tuple[Path, Path]:
+    paths = config["paths"]
+
+    runtime = Path(paths["runtime"])
+    memory = Path(paths["memory"]) / identity
+
+    directory = options.state_dir or runtime / "business" / identity
+
+    return directory, memory
+
+
+# ---------------------------------------------------------------------
+# Commands that don't require Telegram initialization
+# ---------------------------------------------------------------------
+
+
+def _handle_offline_command(
+    options: TelegramOptions,
+    directory: Path,
+    memory: Path,
+    journal: TelegramJournal,
+) -> bool:
+    if options.command == "export":
+        _handle_export(directory, memory, journal)
+        return True
+
+    if options.command == "status" and not options.live:
+        _handle_status(directory, journal)
+        return True
+
+    if options.command == "confirm-appearance":
+        _handle_confirm_appearance(options, journal)
+        return True
+
+    return False
+
+
+def _handle_export(
+    directory: Path,
+    memory: Path,
+    journal: TelegramJournal,
+) -> None:
+    journal.report()
+    print(export_bundle(directory, memory))
+
+
+def _handle_status(
+    directory: Path,
+    journal: TelegramJournal,
+) -> None:
+    journal.report()
+    print((directory / "business_status.json").read_text(encoding="utf-8"))
+
+
+def _handle_confirm_appearance(
+    options: TelegramOptions,
+    journal: TelegramJournal,
+) -> None:
+    receipt = journal.get("test_receipt")
+
+    if not receipt or receipt["message_id"] != options.message_id:
+        raise SetupError("ID не совпал с подтверждённой Telegram тестовой отправкой.")
+
+    journal.set(
+        "appearance_verified",
+        {**receipt, "owner_confirmed": True},
+    )
+    journal.report()
+
+    print(
+        "Владелец подтвердил отображение отправителя. "
+        "Можно запускать run при PERSONA_SEND_ENABLED=true."
+    )
+
+
+def _initialize_transport(
+    stack: ExitStack,
+    config: dict,
+    owner: int,
+    journal: TelegramJournal,
+) -> tuple[asyncio.AbstractEventLoop, TelegramTransport]:
+    settings = config.get("telegram_business", {})
+
+    loop = asyncio.new_event_loop()
+    stack.callback(loop.close)
+
+    api = TelegramBotAPI(os.getenv("TELEGRAM_BOT_TOKEN", ""))
+    stack.callback(lambda: loop.run_until_complete(api.close()))
+
+    transport = TelegramTransport(
+        api,
+        journal,
+        owner_id=owner,
+        allowed_chat_ids=settings.get("allowed_chat_ids", []),
+        bot_username=settings.get("bot_username", "mockingbird_persona_bot"),
+        env_path=ENV_PATH,
+        pause_on_manual_outgoing=settings.get("pause_on_manual_outgoing", True),
+    )
+
+    transport.loop = loop
+    loop.run_until_complete(transport.initialize())
+
+    return loop, transport
+
+
+def _handle_transport_command(
+    options: TelegramOptions,
+    loop: asyncio.AbstractEventLoop,
+    transport: TelegramTransport,
+    directory: Path,
+    journal: TelegramJournal,
+) -> bool:
+    if options.command == "status":
+        _handle_live_status(loop, transport, directory, journal)
+        return True
+
+    if options.command == "observe":
+        _handle_observe(options, loop, transport, journal)
+        return True
+
+    if options.command == "prepare-test":
+        _handle_prepare_test(options, loop, transport, journal)
+        return True
+
+    if options.command == "send-test":
+        _handle_send_test(options, loop, transport, journal)
+        return True
+
+    return False
+
+
+def _handle_live_status(
+    loop: asyncio.AbstractEventLoop,
+    transport: TelegramTransport,
+    directory: Path,
+    journal: TelegramJournal,
+) -> None:
+    loop.run_until_complete(transport.poll())
+    journal.report()
+
+    print((directory / "business_status.json").read_text(encoding="utf-8"))
+
+
+def _handle_observe(
+    options: TelegramOptions,
+    loop: asyncio.AbstractEventLoop,
+    transport: TelegramTransport,
+    journal: TelegramJournal,
+) -> None:
+    if options.seconds < 1 or options.seconds > 3600:
+        raise SetupError("Для observe задай --seconds от 1 до 3600.")
+
+    end = time.monotonic() + options.seconds
+
+    while time.monotonic() < end:
+        loop.run_until_complete(transport.poll())
+        time.sleep(min(2, max(0, end - time.monotonic())))
+
+    journal.report()
+    print("Наблюдение завершено. Модель и sendMessage не запускались.")
+
+
+def _handle_prepare_test(
+    options: TelegramOptions,
+    loop: asyncio.AbstractEventLoop,
+    transport: TelegramTransport,
+    journal: TelegramJournal,
+) -> None:
+    if options.recipient is None or options.text is None:
+        raise SetupError("Для prepare-test укажи получателя и текст сообщения.")
+
+    loop.run_until_complete(transport.poll())
+
+    result = transport.prepare_test(
+        options.recipient,
+        options.text,
+    )
+
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    journal.report()
+
+
+def _handle_send_test(
+    options: TelegramOptions,
+    loop: asyncio.AbstractEventLoop,
+    transport: TelegramTransport,
+    journal: TelegramJournal,
+) -> None:
+    approval = journal.get("test_approval", {})
+
+    if (
+        approval.get("id") != options.approval_id
+        or approval.get("text") != options.confirm_text
+    ):
+        raise SetupError("Точное подтверждение не совпало с подготовленным тестом.")
+
+    approval["approved"] = True
+    journal.set("test_approval", approval)
+
+    transport._staged = (
+        approval["id"],
+        {"kind": "test", **approval},
+    )
+
+    loop.run_until_complete(transport.poll())
+
+    success = loop.run_until_complete(
+        transport.send_message(
+            approval["recipient_id"],
+            approval["text"],
+        )
+    )
+
+    journal.report()
+
+    print(
+        json.dumps(
+            transport.last_delivery,
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+    if not success:
+        raise SetupError("Тест не отправлен; смотри причину выше.")
+
+
+def _create_pipeline(
+    options: TelegramOptions,
+    config: dict,
+    directory: Path,
+    journal: TelegramJournal,
+    transport: TelegramTransport,
+) -> Chat:
+    mockingbird = Mockingbird.from_config(config)
+
+    state = journal.get("state")
+
+    if state:
+        mockingbird.runtime_store.load_snapshot(state)
+    else:
+        mockingbird.runtime_store.restore(directory)
+
+    settings = config["inference_model"]
+
+    chat = Chat(
+        mockingbird,
+        directory,
+        render,
+        model_info={
+            key: settings[key]
+            for key in ("host", "model", "temperature", "json_mode")
+            if key in settings
+        },
+        delivery=transport.deliver,
+        state_sink=transport.checkpoint,
+        max_generations=options.max_generations,
+    )
+
+    return chat
+
+
+def _handle_resolve_delivery(
+    options: TelegramOptions,
+    journal: TelegramJournal,
+    transport: TelegramTransport,
+    chat: Chat,
+) -> None:
+    if options.request_id is None:
+        raise SetupError("Нужен request-id.")
+
+    row = journal.row(options.request_id)
+
+    if not row or row["status"] not in (
+        "prepared",
+        "sending",
+        "unknown",
+        "sent",
+    ):
+        raise SetupError("Нет такой незавершённой отправки.")
+
+    if options.outcome == "not-sent":
+        if row["status"] == "sent":
+            raise SetupError("Telegram уже подтвердил отправку; not-sent запрещён.")
+
+        journal.update(
+            options.request_id,
+            "rejected",
+            error="owner_verified_not_sent",
+        )
+
+    else:
+        if not options.message_id or options.message_id < 1:
+            raise SetupError(
+                "Нужен message-id, вручную сверенный владельцем в Telegram."
+            )
+
+        journal.update(
+            options.request_id,
+            "sent",
+            message_id=options.message_id,
+        )
+        transport.recover()
+
+    transport.checkpoint()
+    journal.report()
+
+    chat.close(checkpoint_life=not bool(journal.unresolved()))
+
+    print("Ручная сверка сохранена. Повторной отправки не было.")

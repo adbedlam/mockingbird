@@ -2,10 +2,10 @@ import json
 
 import pytest
 from dotenv import dotenv_values
-from test_telegram_business import business, connection
+from tests.interfaces.telegram.test_telegram_business import business, connection
 
 from mockingbird.config import save_business_connection_id
-from mockingbird.interfaces.telegram.business import BotAPIError
+from mockingbird.interfaces.telegram.api import BotAPIError
 
 
 @pytest.mark.parametrize("newline", ["\n", "\r\n"])

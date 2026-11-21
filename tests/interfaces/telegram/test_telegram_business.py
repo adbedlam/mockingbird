@@ -8,17 +8,17 @@ from zipfile import ZipFile
 
 import httpx
 import pytest
-from test_pipeline import Clock, Model, bird_for, pump
+from tests.chat.test_pipeline import Clock, Model, bird_for, pump
 
 from mockingbird.chat.chat import Chat
-from mockingbird.interfaces.telegram.business import (
+from mockingbird.interfaces.telegram.api import (
     BotAPIError,
     BotNetworkError,
-    BusinessBotAPI,
-    BusinessJournal,
-    TelegramBusinessTransport,
+    TelegramBotAPI,
 )
-from mockingbird.interfaces.telegram.state import SetupError
+from mockingbird.interfaces.telegram.errors import SetupError
+from mockingbird.interfaces.telegram.journal import TelegramJournal
+from mockingbird.interfaces.telegram.transport import TelegramTransport
 from mockingbird.observability import export_bundle
 
 
@@ -95,8 +95,8 @@ def business(tmp_path, monkeypatch):
     monkeypatch.delenv("TELEGRAM_BUSINESS_CONNECTION_ID", raising=False)
     clock, loop = Clock(), asyncio.new_event_loop()
     api = FakeAPI(clock)
-    journal = BusinessJournal(tmp_path, (10, 20))
-    transport = TelegramBusinessTransport(
+    journal = TelegramJournal(tmp_path, (10, 20))
+    transport = TelegramTransport(
         api, journal, owner_id=10, allowed_chat_ids=[20], clock=clock
     )
     transport.loop = loop
@@ -281,7 +281,7 @@ def test_public_send_deduplicates_across_restart(business):
     transport, clock, api, loop = business
     incoming(business)
     assert loop.run_until_complete(transport.send_message(20, "один раз"))
-    second = TelegramBusinessTransport(
+    second = TelegramTransport(
         api, transport.journal, owner_id=10, allowed_chat_ids=[20], clock=clock
     )
     assert loop.run_until_complete(second.send_message(20, "один раз"))
@@ -368,7 +368,7 @@ def test_http_errors_never_expose_token(monkeypatch):
         )
 
     async def check():
-        api = BusinessBotAPI(token, transport=httpx.MockTransport(handler))
+        api = TelegramBotAPI(token, transport=httpx.MockTransport(handler))
         try:
             with pytest.raises(BotAPIError) as caught:
                 await api.call("getMe")
@@ -382,7 +382,7 @@ def test_http_errors_never_expose_token(monkeypatch):
 def test_mass_messaging_is_rejected(business):
     transport, clock, api, loop = business
     with pytest.raises(SetupError):
-        TelegramBusinessTransport(
+        TelegramTransport(
             api, transport.journal, owner_id=10, allowed_chat_ids=[20, 30]
         )
 

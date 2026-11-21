@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
-from test_pipeline import Clock, Model, bird_for, pump
+from tests.chat.test_pipeline import Clock, Model, bird_for, pump
 
 from mockingbird.chat.chat import Chat
 from mockingbird.conversation.history import History

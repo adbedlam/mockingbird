@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from config_helpers import scheduler_settings
+from tests.config_helpers import scheduler_settings
 
 from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message
@@ -21,7 +21,7 @@ def test_preview_writes_report_without_network_or_artifact_changes(
 ):
     from datetime import datetime, timedelta
 
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     processed = tmp_path / "processed"
     messages = []
     for offset in range(14):

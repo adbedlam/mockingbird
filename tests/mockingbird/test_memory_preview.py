@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import yaml
-from test_local_persona import config_for
+from tests.mockingbird.test_local_persona import config_for
 
 from mockingbird.persona.diary.diary import Diary
 from mockingbird.persona.diary.runtime import DiaryMemory
@@ -95,7 +95,7 @@ def test_memory_preview_cli_prepare_generate_resume_and_preserved_requests(tmp_p
     def run(args):
         return subprocess.run(
             base + args,
-            cwd=Path(__file__).resolve().parents[1],
+            cwd=Path(__file__).resolve().parents[2],
             env=env,
             capture_output=True,
             text=True,

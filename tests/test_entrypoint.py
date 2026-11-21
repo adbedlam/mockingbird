@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from mockingbird import entrypoint
-from mockingbird.interfaces.telegram import business, interface
+from mockingbird.interfaces.telegram import interface
 from mockingbird.interfaces.telegram.options import TelegramOptions
 from mockingbird.interfaces.terminal import interface
 from mockingbird.interfaces.terminal.options import TerminalOptions
@@ -100,4 +100,3 @@ def test_main_dispatches_to_selected_interface(
 def test_interfaces_do_not_export_cli_entrypoints():
     assert not hasattr(interface, "main")
     assert not hasattr(interface, "main")
-    assert not hasattr(business, "main")

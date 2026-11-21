@@ -5,7 +5,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
-from config_helpers import scheduler_settings
+from tests.config_helpers import scheduler_settings
 
 from mockingbird.chat.chat import Chat
 from mockingbird.chat.event_recorder.event_recorder import PipelineEvent
