@@ -27,16 +27,10 @@ RequestTask = ReplyTask | DiaryTask | LifePlanTask
 
 
 @dataclass
-class ModelResult:
-    raw: str = ""
-    error: str = ""
-
-
-@dataclass
 class PendingRequest:
     task: RequestTask
     path: Path
     started: float
     heartbeat: float
-    future: Future[ModelResult]
+    future: Future[str]
     cancelled: bool = False

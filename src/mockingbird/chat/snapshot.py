@@ -19,8 +19,8 @@ class Snapshot:
     live_message_count: int
 
     @classmethod
-    def capture(cls, bird: Mockingbird) -> Snapshot:
-        scheduler = bird.scheduler
+    def capture(cls, mockingbird: Mockingbird) -> Snapshot:
+        scheduler = mockingbird.scheduler
         return cls(
             scheduler.day,
             tuple(scheduler.planned),
@@ -28,7 +28,7 @@ class Snapshot:
             scheduler.revision,
             scheduler.initiations_sent,
             scheduler.busy_until,
-            len(bird.live.messages),
+            len(mockingbird.live.messages),
         )
 
 
@@ -38,14 +38,14 @@ class SnapshotStore:
 
     def persist(
         self,
-        bird: Mockingbird,
+        mockingbird: Mockingbird,
         directory: Path,
         state_sink: Callable[[], None] | None,
     ) -> None:
-        snapshot = Snapshot.capture(bird)
+        snapshot = Snapshot.capture(mockingbird)
         if snapshot == self._saved:
             return
         if state_sink is not None:
             state_sink()
-        bird.runtime_store.save(directory)
+        mockingbird.runtime_store.save(directory)
         self._saved = snapshot

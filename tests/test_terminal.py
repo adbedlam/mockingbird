@@ -176,7 +176,7 @@ def test_real_terminal_input_status_context_and_unicode_output(
         wait_for("SCHEDULE")
         assert received.wait(5), "".join(lines)
         send("/status")
-        wait_for("Запрос к модели: выполняется")
+        wait_for("Model request: in progress")
         send("/context")
         wait_for("CONTEXT")
         release.set()

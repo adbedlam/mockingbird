@@ -10,6 +10,7 @@ from mockingbird.conversation.identity import pair_id
 from mockingbird.conversation.message import Message as ConversationMessage
 from mockingbird.llm.client import LLM
 from mockingbird.llm.message import Message
+from mockingbird.llm.protocol import CompletionModel
 from mockingbird.mockingbird.context import ContextAccessors, ContextBuilder
 from mockingbird.mockingbird.draft import Draft, parse_draft
 from mockingbird.mockingbird.memory import MemoryQuery
@@ -28,10 +29,6 @@ from mockingbird.persona.source import load_manifest
 from mockingbird.preprocessing.telegram.source import load_latest_history
 from mockingbird.scheduler.profile import BehaviorProfile
 from mockingbird.scheduler.scheduler import Decision, MessageKind, Scheduler
-
-
-class CompletionModel(Protocol):
-    def complete(self, messages: list[Message]) -> str: ...
 
 
 class Mockingbird:
@@ -192,7 +189,7 @@ class Mockingbird:
             if memory_enabled and diary_settings.get("enabled", True)
             else None
         )
-        bird = cls(
+        mockingbird = cls(
             history,
             InnerPrompt.load(processed / paths["inner_prompt_filename"]),
             base_diary,
@@ -218,10 +215,12 @@ class Mockingbird:
             memory_max_age_days=context_settings.get("memory_max_age_days", 365),
             memory_search=search_config,
         )
-        bird.source_origin = origin
-        bird.source_info = History.history_info(history, profile.config["timezone"])
-        bird.persona_sources = load_manifest(processed)
-        return bird
+        mockingbird.source_origin = origin
+        mockingbird.source_info = History.history_info(
+            history, profile.config["timezone"]
+        )
+        mockingbird.persona_sources = load_manifest(processed)
+        return mockingbird
 
     def receive(
         self,

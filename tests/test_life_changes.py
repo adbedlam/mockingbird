@@ -7,7 +7,7 @@ import pytest
 from test_life import life_for, plan
 from test_pipeline import Clock, Model, bird_for, pump
 
-from mockingbird.chat.pipeline import ChatPipeline
+from mockingbird.chat.chat import Chat
 from mockingbird.mockingbird.draft import parse_draft
 from mockingbird.scheduler.scheduler import MessageKind
 
@@ -172,11 +172,11 @@ def pipeline_for(tmp_path, model, max_generations=2):
     life, now, _ = setup_life(tmp_path)
     clock = Clock()
     clock.now = now
-    bird = bird_for(model)
-    bird.life = life
+    mockingbird = bird_for(model)
+    mockingbird.life = life
     events = []
-    pipeline = ChatPipeline(
-        bird,
+    pipeline = Chat(
+        mockingbird,
         tmp_path / "runtime",
         events.append,
         clock=clock,
@@ -193,7 +193,7 @@ def change_reply(pipeline):
             "text": "давай вечером потестим проект",
             "reason": "соглашаюсь",
             "life_update": replacement(
-                pipeline.bird.memory_query.pending_incoming()[-1]["id"]
+                pipeline.mockingbird.memory_query.pending_incoming()[-1]["id"]
             ),
         }
     )
@@ -217,8 +217,10 @@ def test_pipeline_change_and_followup_context_use_one_reply_call_each(tmp_path):
     clock.now += timedelta(seconds=5)
     pump(pipeline, lambda: any(e.stage == "LIFE_CHANGED" for e in events))
     assert len(model.calls) == 1
-    assert pipeline.bird.life.days["2026-11-17"]["revision"] == 1
-    assert pipeline.bird.live.messages[-1].text == "давай вечером потестим проект"
+    assert pipeline.mockingbird.life.days["2026-11-17"]["revision"] == 1
+    assert (
+        pipeline.mockingbird.live.messages[-1].text == "давай вечером потестим проект"
+    )
     pipeline.receive("что вечером делать будешь")
     clock.now += timedelta(seconds=5)
     pump(pipeline, lambda: sum(e.stage == "OUTPUT" for e in events) == 2)
@@ -237,8 +239,8 @@ def test_pipeline_change_and_followup_context_use_one_reply_call_each(tmp_path):
     assert sum(bool(r.get("life_change")) for r in requests) == 1
     clock.now = clock.now.replace(hour=23)
     pipeline.close()
-    assert "потестировал проект" in pipeline.bird.life.diary_view()
-    assert "погулял" not in pipeline.bird.life.diary_view()
+    assert "потестировал проект" in pipeline.mockingbird.life.diary_view()
+    assert "погулял" not in pipeline.mockingbird.life.diary_view()
 
 
 @pytest.mark.parametrize(
@@ -263,7 +265,7 @@ def test_discarded_or_late_reply_never_changes_plan(tmp_path, discard):
     model.release.set()
     pump(pipeline, lambda: pipeline.inflight is None)
     assert not any(e.stage in ("LIFE_CHANGED", "OUTPUT") for e in events)
-    assert pipeline.bird.life.days["2026-11-17"]["revision"] == 0
+    assert pipeline.mockingbird.life.days["2026-11-17"]["revision"] == 0
     pipeline.close()
 
 
@@ -284,10 +286,10 @@ def test_failed_plan_save_keeps_reply_pending_and_no_acceptance_output(
     monkeypatch.setattr(Path, "replace", fail)
     clock.now += timedelta(seconds=5)
     pump(pipeline, lambda: any(e.stage == "ERROR" for e in events))
-    assert pipeline.bird.scheduler.reply_due is not None
-    assert pipeline.bird.scheduler.last_outgoing is None
-    assert len(pipeline.bird.live.messages) == 1
-    assert pipeline.bird.life.days["2026-11-17"]["revision"] == 0
+    assert pipeline.mockingbird.scheduler.reply_due is not None
+    assert pipeline.mockingbird.scheduler.last_outgoing is None
+    assert len(pipeline.mockingbird.live.messages) == 1
+    assert pipeline.mockingbird.life.days["2026-11-17"]["revision"] == 0
     assert not any(e.stage == "LIFE_CHANGED" for e in events)
 
 

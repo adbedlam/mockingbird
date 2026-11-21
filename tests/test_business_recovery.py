@@ -27,7 +27,7 @@ def test_poll_outage_does_not_persist_manual_pause_or_generate(business):
     assert not pipeline.paused
     assert not transport.journal.get("paused")
     pipeline.step()
-    assert not pipeline.bird.model.calls
+    assert not pipeline.mockingbird.model.calls
     assert not any(e.stage == "PAUSED" for e in events)
     loop.run_until_complete(transport.poll())
     assert transport.network_available
@@ -48,7 +48,7 @@ def test_network_recovery_preserves_manual_owner_pause(business):
     loop.run_until_complete(transport.poll())
     assert pipeline.paused
     assert transport.journal.get("pause_reason") == "owner_message"
-    assert not pipeline.bird.model.calls
+    assert not pipeline.mockingbird.model.calls
 
 
 def test_reconnect_backoff_throttles_duplicate_logs_and_honors_429(business):
@@ -87,7 +87,7 @@ def test_repeated_owner_update_does_not_pause_after_resume(business):
     api.updates.append(duplicate)
     loop.run_until_complete(transport.poll())
     assert not pipeline.paused
-    assert len(pipeline.bird.live.messages) == 1
+    assert len(pipeline.mockingbird.live.messages) == 1
     assert len([e for e in events if e.stage == "BUSINESS_PAUSED"]) == count
 
 
@@ -99,8 +99,8 @@ def test_manual_outgoing_can_update_context_without_auto_pause(business):
     api.incoming(2, text="я сам ответил", sender=10)
     loop.run_until_complete(transport.poll())
     assert not pipeline.paused
-    assert pipeline.bird.scheduler.reply_due is None
-    assert pipeline.bird.live.messages[-1].text == "я сам ответил"
+    assert pipeline.mockingbird.scheduler.reply_due is None
+    assert pipeline.mockingbird.live.messages[-1].text == "я сам ответил"
     api.incoming(3, text="следующий вопрос")
     loop.run_until_complete(transport.poll())
     clock.now += timedelta(seconds=5)
@@ -129,7 +129,7 @@ def test_pre_send_read_failure_defers_without_permanent_pause(business, method):
     assert not pipeline.delivery_blocked
     assert not transport.journal.unresolved()
     assert not any(name == "sendMessage" for name, _ in api.calls)
-    assert len(pipeline.bird.model.calls) == 1
+    assert len(pipeline.mockingbird.model.calls) == 1
     api.call = original
     loop.run_until_complete(transport.poll())
     pipeline.step()

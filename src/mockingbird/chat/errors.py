@@ -8,3 +8,7 @@ class DeliverySuperseded(RuntimeError):
 
 class DeliveryDeferred(RuntimeError):
     """A read failed before sending. Wait for transport recovery, not operator input."""
+
+
+class ModelReplyError(RuntimeError):
+    """The model failed to produce a usable reply."""

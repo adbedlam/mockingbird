@@ -266,7 +266,7 @@ def test_model_can_send_or_decline_without_changing_source_history(
             }
         )
     )
-    bird = Mockingbird(
+    mockingbird = Mockingbird(
         history,
         InnerPrompt("Style"),
         Diary(),
@@ -275,10 +275,10 @@ def test_model_can_send_or_decline_without_changing_source_history(
         life_prompt=LifePrompt(content=""),
     )
     decision = scheduler.tick(at())
-    draft = bird.compose(decision, at())
-    bird.commit(decision, draft, at())
+    draft = mockingbird.compose(decision, at())
+    mockingbird.commit(decision, draft, at())
     assert scheduler.initiations_sent == int(send)
-    assert len(bird.live.messages) == int(send)
+    assert len(mockingbird.live.messages) == int(send)
     assert len(history.messages) == 112
     assert model.calls == 1
 
@@ -287,7 +287,7 @@ def test_bad_model_output_keeps_pending_decision(
     history: History, profile: BehaviorProfile
 ):
     scheduler = scheduled(profile, at())
-    bird = Mockingbird(
+    mockingbird = Mockingbird(
         history,
         InnerPrompt("Style"),
         Diary(),
@@ -297,7 +297,7 @@ def test_bad_model_output_keeps_pending_decision(
     )
     decision = scheduler.tick(at())
     with pytest.raises(ValueError):
-        bird.compose(decision, at())
+        mockingbird.compose(decision, at())
     assert scheduler.initiations_sent == 0
     assert scheduler.planned == [at()]
 
@@ -305,7 +305,7 @@ def test_bad_model_output_keeps_pending_decision(
 def test_runtime_restart_keeps_incoming_and_reply(
     history: History, profile: BehaviorProfile, tmp_path: Path
 ):
-    bird = Mockingbird(
+    mockingbird = Mockingbird(
         history,
         InnerPrompt("Style"),
         Diary(),
@@ -313,8 +313,8 @@ def test_runtime_restart_keeps_incoming_and_reply(
         FakeModel(""),
         life_prompt=LifePrompt(content=""),
     )
-    bird.receive("Привет", at())
-    bird.runtime_store.save(tmp_path)
+    mockingbird.receive("Привет", at())
+    mockingbird.runtime_store.save(tmp_path)
     restored = Mockingbird(
         history,
         InnerPrompt("Style"),
@@ -324,13 +324,13 @@ def test_runtime_restart_keeps_incoming_and_reply(
         life_prompt=LifePrompt(content=""),
     )
     restored.runtime_store.restore(tmp_path)
-    assert restored.live.messages == bird.live.messages
-    assert restored.scheduler.reply_due == bird.scheduler.reply_due
+    assert restored.live.messages == mockingbird.live.messages
+    assert restored.scheduler.reply_due == mockingbird.scheduler.reply_due
 
 
 def test_empty_message_cannot_be_committed(history: History, profile: BehaviorProfile):
     scheduler = scheduled(profile, at())
-    bird = Mockingbird(
+    mockingbird = Mockingbird(
         history,
         InnerPrompt("Style"),
         Diary(),
@@ -340,7 +340,7 @@ def test_empty_message_cannot_be_committed(history: History, profile: BehaviorPr
     )
     decision = scheduler.tick(at())
     with pytest.raises(ValueError, match="empty message"):
-        bird.commit(decision, Draft(True, "", "invalid"), at())
+        mockingbird.commit(decision, Draft(True, "", "invalid"), at())
     assert scheduler.initiations_sent == 0
 
 

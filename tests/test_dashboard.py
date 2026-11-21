@@ -11,7 +11,6 @@ from mockingbird.dashboard.app import (
     create_server,
     dashboard_key,
     running_dashboard,
-    tail_events,
 )
 
 

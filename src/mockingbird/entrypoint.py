@@ -7,8 +7,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from mockingbird.config import CONFIG_PATH, load_config
-from mockingbird.interfaces.terminal.options import TerminalOptions
 from mockingbird.interfaces.telegram.options import TelegramOptions
+from mockingbird.interfaces.terminal.options import TerminalOptions
 
 TELEGRAM_COMMANDS = (
     "status",
@@ -98,15 +98,15 @@ def _options(
         parser.error("--interface telegram requires a Telegram command")
     if args.seed is not None or args.refresh_persona or args.no_refresh_persona:
         parser.error("--seed and persona refresh options apply only to --interface cli")
-    if args.command != "run" and (args.fast_replies or args.max_generations is not None):
+    if args.command != "run" and (
+        args.fast_replies or args.max_generations is not None
+    ):
         parser.error("--fast-replies and --max-generations apply only to Telegram run")
     if args.command != "status" and args.live:
         parser.error("--live applies only to Telegram status")
     if args.command != "observe" and args.seconds is not None:
         parser.error("--seconds applies only to Telegram observe")
-    if args.command == "prepare-test" and (
-        args.recipient is None or args.text is None
-    ):
+    if args.command == "prepare-test" and (args.recipient is None or args.text is None):
         parser.error("prepare-test requires --recipient and --text")
     if args.command == "send-test" and (
         args.approval_id is None or args.confirm_text is None
@@ -129,7 +129,9 @@ def _options(
     if args.command not in ("confirm-appearance", "resolve-delivery") and (
         args.message_id is not None
     ):
-        parser.error("--message-id applies only to confirm-appearance or resolve-delivery")
+        parser.error(
+            "--message-id applies only to confirm-appearance or resolve-delivery"
+        )
     if args.command != "resolve-delivery" and (
         args.request_id is not None or args.outcome is not None
     ):

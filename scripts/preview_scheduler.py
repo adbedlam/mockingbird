@@ -96,10 +96,10 @@ def main() -> None:
     config = load_config(args.config)
     if args.output is None:
         args.output = Path(config["paths"]["runtime"]) / "previews/scheduler-preview.md"
-    bird = Mockingbird.from_config(
+    mockingbird = Mockingbird.from_config(
         config, args.seed, None if args.generate else NoModel(), memory_enabled=False
     )
-    profile = bird.scheduler.profile
+    profile = mockingbird.scheduler.profile
     start = args.date or datetime.now(profile.zone).date()
     now = datetime.combine(start, time(), profile.zone)
     end = now + timedelta(days=args.days)
@@ -146,17 +146,17 @@ def main() -> None:
         while incoming and incoming[0] <= now:
             incoming.pop(0)
             text = "Привет! Что хотел обсудить?"
-            bird.receive(text, now)
+            mockingbird.receive(text, now)
             log("INCOMING (сценарий)", "Искусственный ответ собеседника", text)
             log(
                 "REPLY_PLAN",
-                f"Ответ запланирован на {bird.scheduler.reply_due}; задержка взята из истории и перенесена в активное время при необходимости.",
+                f"Ответ запланирован на {mockingbird.scheduler.reply_due}; задержка взята из истории и перенесена в активное время при необходимости.",
             )
-        decision = bird.scheduler.tick(now)
+        decision = mockingbird.scheduler.tick(now)
         if shown_day != now.date():
             shown_day = now.date()
             times = (
-                ", ".join(t.strftime("%H:%M:%S") for t in bird.scheduler.planned)
+                ", ".join(t.strftime("%H:%M:%S") for t in mockingbird.scheduler.planned)
                 or "инициативы не запланированы"
             )
             log(
@@ -182,7 +182,9 @@ def main() -> None:
                             "body": {
                                 "model": settings["model"],
                                 "temperature": settings.get("temperature", 0.7),
-                                "messages": bird.context_builder.build(decision, now),
+                                "messages": mockingbird.context_builder.build(
+                                    decision, now
+                                ),
                             },
                         },
                         ensure_ascii=False,
@@ -201,7 +203,7 @@ def main() -> None:
                     break
                 generations += 1
                 try:
-                    draft = bird.compose(decision, now)
+                    draft = mockingbird.compose(decision, now)
                 except Exception as exc:
                     log(
                         "ERROR",
@@ -213,10 +215,10 @@ def main() -> None:
                     True, "", "Модель не вызывалась; проверяем разрешение на отправку"
                 )
             if args.generate:
-                bird.commit(decision, draft, now)
+                mockingbird.commit(decision, draft, now)
             else:
                 # A timing acknowledgement is not a generated chat message.
-                bird.scheduler.mark_sent(decision, now)
+                mockingbird.scheduler.mark_sent(decision, now)
             log(
                 f"SEND {decision.kind}" if draft.send else "MODEL_SKIP",
                 decision.reason,

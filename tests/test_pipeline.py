@@ -8,8 +8,8 @@ from zoneinfo import ZoneInfo
 import pytest
 from config_helpers import scheduler_settings
 
-from mockingbird.chat.events import PipelineEvent
-from mockingbird.chat.pipeline import ChatPipeline
+from mockingbird.chat.chat import Chat
+from mockingbird.chat.event_recorder.event_recorder import PipelineEvent
 from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message
 from mockingbird.interfaces.common import SessionLock
@@ -58,6 +58,12 @@ class Model:
         return self.responses[min(index, len(self.responses) - 1)]
 
 
+class FailingModel(Model):
+    def complete(self, messages: list) -> str:
+        super().complete(messages)
+        raise RuntimeError("provider unavailable")
+
+
 def bird_for(model: Model) -> Mockingbird:
     source = History(
         "Persona",
@@ -89,17 +95,15 @@ def bird_for(model: Model) -> Mockingbird:
 
 def make_pipeline(
     tmp_path: Path, model: Model, **kwargs
-) -> tuple[ChatPipeline, Clock, list[PipelineEvent]]:
+) -> tuple[Chat, Clock, list[PipelineEvent]]:
     clock = Clock()
     events: list[PipelineEvent] = []
-    pipeline = ChatPipeline(
-        bird_for(model), tmp_path, events.append, clock=clock, **kwargs
-    )
+    pipeline = Chat(bird_for(model), tmp_path, events.append, clock=clock, **kwargs)
     pipeline.start()
     return pipeline, clock, events
 
 
-def pump(pipeline: ChatPipeline, predicate) -> None:
+def pump(pipeline: Chat, predicate) -> None:
     deadline = time.monotonic() + 3
     while not predicate() and time.monotonic() < deadline:
         pipeline.step()
@@ -122,8 +126,8 @@ def test_fast_reply_inactive_hours_has_full_trace_and_exact_context(tmp_path: Pa
         < stages.index("OUTPUT")
     )
     assert len(model.calls) == 1
-    assert pipeline.bird.live.messages[-1].text == "Привет \U0001f426"
-    assert pipeline.bird.scheduler.initiations_sent == 0
+    assert pipeline.mockingbird.live.messages[-1].text == "Привет \U0001f426"
+    assert pipeline.mockingbird.scheduler.initiations_sent == 0
     assert pipeline.last_request is not None
     request = json.loads(pipeline.last_request.read_text(encoding="utf-8"))
     assert request["messages"] == model.calls[0]
@@ -135,7 +139,7 @@ def test_fast_reply_inactive_hours_has_full_trace_and_exact_context(tmp_path: Pa
     assert "Привет, как дела? \U0001f426" in serialized
     transcript = (tmp_path / "chat_transcript.md").read_text(encoding="utf-8")
     assert "Привет \U0001f426" in transcript
-    assert "Решение модели: Отвечаю на вопрос" in transcript
+    assert "Model decision: Отвечаю на вопрос" in transcript
 
 
 def test_incoming_and_status_work_during_generation_and_stale_reply_is_discarded(
@@ -150,7 +154,7 @@ def test_incoming_and_status_work_during_generation_and_stale_reply_is_discarded
     pipeline.step()
     assert model.started.wait(1)
     pipeline.command("/status")
-    assert "выполняется" in events[-1].message
+    assert "in progress" in events[-1].message
     clock.now += timedelta(seconds=1)
     pipeline.receive("second question")
     assert events[-1].stage == "SUPERSEDED"
@@ -159,7 +163,7 @@ def test_incoming_and_status_work_during_generation_and_stale_reply_is_discarded
     pump(pipeline, lambda: any(e.stage == "OUTPUT" for e in events))
     pipeline.close()
     assert any(e.stage == "DISCARD" for e in events)
-    assert [m.text for m in pipeline.bird.live.messages] == [
+    assert [m.text for m in pipeline.mockingbird.live.messages] == [
         "first question",
         "second question",
         "new reply",
@@ -189,7 +193,7 @@ def test_three_invalid_outputs_pause_retries_and_preserve_incoming(tmp_path: Pat
     pipeline, clock, events = make_pipeline(tmp_path, model)
     pipeline.receive("question")
     for attempt in range(3):
-        clock.now = pipeline.bird.scheduler.reply_due
+        clock.now = pipeline.mockingbird.scheduler.reply_due
         pipeline.step()
         pump(pipeline, lambda: pipeline.failures == attempt + 1)
     for _ in range(5):
@@ -198,9 +202,26 @@ def test_three_invalid_outputs_pause_retries_and_preserve_incoming(tmp_path: Pat
     pipeline.close()
     assert pipeline.paused
     assert len(model.calls) == 3
-    assert pipeline.bird.live.messages[-1].text == "question"
-    assert pipeline.bird.scheduler.initiations_sent == 0
+    assert pipeline.mockingbird.live.messages[-1].text == "question"
+    assert pipeline.mockingbird.scheduler.initiations_sent == 0
     assert sum(e.stage == "ERROR" for e in events) == 3
+
+
+def test_model_exception_propagates_through_future_and_is_retried(
+    tmp_path: Path,
+):
+    pipeline, clock, events = make_pipeline(tmp_path, FailingModel())
+    pipeline.receive("question")
+    clock.now += timedelta(seconds=5)
+    pipeline.step()
+    pump(pipeline, lambda: pipeline.failures == 1)
+
+    request = json.loads(pipeline.last_request.read_text(encoding="utf-8"))
+    pipeline.close()
+
+    assert request["status"] == "error"
+    assert request["error"] == "provider unavailable"
+    assert sum(event.stage == "ERROR" for event in events) == 1
 
 
 def test_pending_reply_survives_restart_and_commands_are_not_model_input(
@@ -220,7 +241,7 @@ def test_pending_reply_survives_restart_and_commands_are_not_model_input(
     assert [m.text for m in restored.live.messages] == ["remember this"]
     due = restored.scheduler.reply_due
     new_events: list[PipelineEvent] = []
-    next_pipeline = ChatPipeline(restored, tmp_path, new_events.append, clock=clock)
+    next_pipeline = Chat(restored, tmp_path, new_events.append, clock=clock)
     clock.now = due
     next_pipeline.start()
     pump(next_pipeline, lambda: any(e.stage == "OUTPUT" for e in new_events))
@@ -231,20 +252,20 @@ def test_pending_reply_survives_restart_and_commands_are_not_model_input(
 
 def test_autonomous_slot_runs_without_any_incoming(tmp_path: Path):
     model = Model()
-    bird = bird_for(model)
+    mockingbird = bird_for(model)
     clock = Clock()
     clock.now = clock.now.replace(hour=9)
-    bird.scheduler.day = clock.now.date()
-    bird.scheduler.planned = [clock.now]
+    mockingbird.scheduler.day = clock.now.date()
+    mockingbird.scheduler.planned = [clock.now]
     events: list[PipelineEvent] = []
-    pipeline = ChatPipeline(
-        bird, tmp_path, events.append, clock=clock, max_generations=1
+    pipeline = Chat(
+        mockingbird, tmp_path, events.append, clock=clock, max_generations=1
     )
     pipeline.start()
     pump(pipeline, lambda: any(e.stage == "OUTPUT" for e in events))
     pipeline.close()
-    assert bird.scheduler.initiations_sent == 1
-    assert bird.scheduler.awaiting_reply
+    assert mockingbird.scheduler.initiations_sent == 1
+    assert mockingbird.scheduler.awaiting_reply
     assert not any(e.stage == "INPUT" for e in events)
 
 
@@ -258,9 +279,9 @@ def test_exclusive_session_lock_releases_after_exit(tmp_path: Path):
 
 
 def test_old_scheduler_snapshot_defaults_to_history_reply_mode(tmp_path: Path):
-    bird = bird_for(Model())
+    mockingbird = bird_for(Model())
     history_config = scheduler_settings()
-    profile = BehaviorProfile(bird.history, history_config)
+    profile = BehaviorProfile(mockingbird.history, history_config)
     state = tmp_path / "scheduler.json"
     Scheduler(profile).save(state, ("Persona", "Partner"))
     data = json.loads(state.read_text(encoding="utf-8"))
@@ -279,7 +300,7 @@ def test_plain_reply_is_output_once_with_explicit_format_fallback(tmp_path: Path
     pipeline.close()
     assert len(model.calls) == 1
     assert pipeline.failures == 0
-    assert pipeline.bird.scheduler.reply_due is None
+    assert pipeline.mockingbird.scheduler.reply_due is None
     output = next(e for e in events if e.stage == "OUTPUT")
     assert output.data["text"] == "Ответ готов обычным текстом"
     assert "reason" not in output.data

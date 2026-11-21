@@ -139,15 +139,15 @@ def test_offline_preview_cli_and_runtime_life_directory(tmp_path):
         def complete(self, messages):
             raise AssertionError("No network")
 
-    bird = Mockingbird.from_config(config, model=Offline())
-    assert bird.life is not None
-    assert bird.life.user == "Nikita"
-    assert bird.life.directory == (
+    mockingbird = Mockingbird.from_config(config, model=Offline())
+    assert mockingbird.life is not None
+    assert mockingbird.life.user == "Nikita"
+    assert mockingbird.life.directory == (
         Path(config["paths"]["processed"]).parent
         / "runtime"
         / "memory"
         / pair_id("Nikita", "Vanya")
         / "life"
     )
-    assert bird.memory is None
-    assert not bird.life.directory.exists()
+    assert mockingbird.memory is None
+    assert not mockingbird.life.directory.exists()

@@ -4,8 +4,8 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
-from mockingbird.chat.events import PipelineEvent
-from mockingbird.chat.pipeline import ChatPipeline
+from mockingbird.chat.chat import Chat
+from mockingbird.chat.event_recorder.event_recorder import PipelineEvent
 from mockingbird.mockingbird.draft import Draft
 from mockingbird.mockingbird.mockingbird import Mockingbird
 from mockingbird.scheduler.scheduler import Decision
@@ -21,19 +21,17 @@ def create_bird(
 
 def create_pipeline(
     config: dict,
-    bird: Mockingbird,
+    mockingbird: Mockingbird,
     directory: Path,
     on_event: Callable[[PipelineEvent], None],
     *,
     max_generations: int | None = None,
-    delivery: (
-        Callable[[Decision, Draft, datetime, Path], dict | None] | None
-    ) = None,
+    delivery: Callable[[Decision, Draft, datetime, Path], dict | None] | None = None,
     state_sink: Callable[[], None] | None = None,
-) -> ChatPipeline:
+) -> Chat:
     settings = config["inference_model"]
-    return ChatPipeline(
-        bird,
+    return Chat(
+        mockingbird,
         directory,
         on_event,
         model_info={

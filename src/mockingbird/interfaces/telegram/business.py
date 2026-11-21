@@ -12,12 +12,12 @@ from typing import Any
 
 import httpx
 
+from mockingbird.chat.chat import Chat
 from mockingbird.chat.errors import (
     DeliveryBlocked,
     DeliveryDeferred,
     DeliverySuperseded,
 )
-from mockingbird.chat.pipeline import ChatPipeline
 from mockingbird.config import save_business_connection_id
 from mockingbird.conversation.message import Message
 from mockingbird.interfaces.telegram.state import DeliveryJournal, SetupError
@@ -134,10 +134,12 @@ class BusinessJournal(DeliveryJournal):
             )
         ]
 
-    def applied(self, update_id: int, bird: Mockingbird | None, paused: bool) -> None:
+    def applied(
+        self, update_id: int, mockingbird: Mockingbird | None, paused: bool
+    ) -> None:
         with self.db:
-            if bird is not None:
-                self._set("state", bird.runtime_store.snapshot())
+            if mockingbird is not None:
+                self._set("state", mockingbird.runtime_store.snapshot())
             self._set("paused", paused)
             self.db.execute(
                 "UPDATE business_updates SET status='applied' WHERE id=?", (update_id,)
@@ -228,7 +230,7 @@ class TelegramBusinessTransport:
         self.send_enabled = send_enabled or (
             lambda: os.getenv("PERSONA_SEND_ENABLED", "false").strip().lower() == "true"
         )
-        self.pipeline: ChatPipeline | None = None
+        self.pipeline: Chat | None = None
         self.loop: asyncio.AbstractEventLoop | None = None
         self.last_delivery: dict = {}
         self.backlog = False
@@ -333,7 +335,7 @@ class TelegramBusinessTransport:
 
     def checkpoint(self) -> None:
         if self.pipeline:
-            self.journal.save_state(self.pipeline.bird, self.pipeline.paused)
+            self.journal.save_state(self.pipeline.mockingbird, self.pipeline.paused)
 
     def pause(self, message: str, *, reason: str = "operator", **data: Any) -> None:
         self.journal.set("auto_pause_reason", None)
@@ -430,7 +432,7 @@ class TelegramBusinessTransport:
             await self.handle_update(update)
             self.journal.applied(
                 update["update_id"],
-                self.pipeline.bird if self.pipeline else None,
+                self.pipeline.mockingbird if self.pipeline else None,
                 (
                     self.pipeline.paused
                     if self.pipeline
@@ -500,7 +502,7 @@ class TelegramBusinessTransport:
         if sender == self.owner_id:
             if self.pipeline and any(
                 m.message_id == message["message_id"]
-                for m in self.pipeline.bird.live.messages
+                for m in self.pipeline.mockingbird.live.messages
             ):
                 self.forget_message(message)
                 return
@@ -530,16 +532,16 @@ class TelegramBusinessTransport:
             self.remember_message(message)
             if self.pipeline and not any(
                 m.message_id == message["message_id"]
-                for m in self.pipeline.bird.live.messages
+                for m in self.pipeline.mockingbird.live.messages
             ):
-                bird = self.pipeline.bird
-                bird.scheduler.reply_due = None
-                bird.scheduler.last_outgoing = self.clock()
-                bird.scheduler.awaiting_reply = True
-                bird.scheduler.revision += 1
-                bird.live.append(
+                mockingbird = self.pipeline.mockingbird
+                mockingbird.scheduler.reply_due = None
+                mockingbird.scheduler.last_outgoing = self.clock()
+                mockingbird.scheduler.awaiting_reply = True
+                mockingbird.scheduler.revision += 1
+                mockingbird.live.append(
                     Message(
-                        bird.history.user,
+                        mockingbird.history.user,
                         datetime.fromtimestamp(message["date"], timezone.utc),
                         text=message.get("text") or "[вложение]",
                         message_id=message["message_id"],
@@ -576,9 +578,9 @@ class TelegramBusinessTransport:
         text = message.get("text") or message.get("caption")
         self.remember_message(message)
         if self.pipeline:
-            bird = self.pipeline.bird
+            mockingbird = self.pipeline.mockingbird
             if text and not any(
-                m.message_id == message["message_id"] for m in bird.live.messages
+                m.message_id == message["message_id"] for m in mockingbird.live.messages
             ):
                 self.pipeline.receive(
                     text,
@@ -627,7 +629,9 @@ class TelegramBusinessTransport:
         pending.pop(self.message_key(message), None)
         with self.journal.db:
             if self.pipeline:
-                self.journal._set("state", self.pipeline.bird.runtime_store.snapshot())
+                self.journal._set(
+                    "state", self.pipeline.mockingbird.runtime_store.snapshot()
+                )
             self.journal._set("pending_messages", pending)
 
     async def restore_messages(self) -> None:
@@ -635,7 +639,7 @@ class TelegramBusinessTransport:
             receipt = self.journal.get("test_receipt")
             if receipt and not any(
                 m.message_id == receipt["message_id"]
-                for m in self.pipeline.bird.live.messages
+                for m in self.pipeline.mockingbird.live.messages
             ):
                 row = self.journal.row(receipt["request_id"])
                 if row:
@@ -841,10 +845,10 @@ class TelegramBusinessTransport:
                 continue
             payload = json.loads(row["payload"])
             if "after" in payload and self.pipeline:
-                self.pipeline.bird.delivery_coordinator.apply_delivery(
+                self.pipeline.mockingbird.delivery_coordinator.apply_delivery(
                     payload, row["message_id"]
                 )
-                self.journal.complete(row["id"], self.pipeline.bird)
+                self.journal.complete(row["id"], self.pipeline.mockingbird)
                 self.emit(
                     "BUSINESS_RECOVERED",
                     "Подтверждённая отправка восстановлена без повторного sendMessage.",
@@ -890,10 +894,10 @@ class TelegramBusinessTransport:
             if (
                 self.backlog
                 or self.pipeline.paused
-                or not self.pipeline.bird.scheduler.is_pending(decision)
+                or not self.pipeline.mockingbird.scheduler.is_pending(decision)
             ):
                 raise DeliverySuperseded()
-            prepared = self.pipeline.bird.delivery_coordinator.prepare_delivery(
+            prepared = self.pipeline.mockingbird.delivery_coordinator.prepare_delivery(
                 decision, draft, self.clock()
             )
             self._staged = (path.stem, prepared)
@@ -908,10 +912,10 @@ class TelegramBusinessTransport:
                     "Business sendMessage не выполнен: "
                     + self.last_delivery.get("reason", "unknown")
                 )
-            self.pipeline.bird.delivery_coordinator.apply_delivery(
+            self.pipeline.mockingbird.delivery_coordinator.apply_delivery(
                 prepared, self.last_delivery["message_id"]
             )
-            self.journal.complete(path.stem, self.pipeline.bird)
+            self.journal.complete(path.stem, self.pipeline.mockingbird)
             return prepared["life_change"]
         except (DeliveryBlocked, DeliveryDeferred, DeliverySuperseded):
             raise

@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import BinaryIO, Self
 
-from mockingbird.chat.events import PipelineEvent
+from mockingbird.chat.event_recorder.event_recorder import PipelineEvent
 from mockingbird.chat.presenter import reason_label
 
 if sys.platform == "win32":

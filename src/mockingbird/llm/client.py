@@ -5,11 +5,12 @@ from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
 from mockingbird.llm.message import Message
+from mockingbird.llm.protocol import CompletionModel
 
 logger = logging.getLogger(__name__)
 
 
-class LLM:
+class LLM(CompletionModel):
     def __init__(
         self,
         host: str,

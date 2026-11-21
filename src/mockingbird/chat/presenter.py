@@ -6,13 +6,13 @@ from mockingbird.scheduler.scheduler import Decision
 
 def reason_label(data: dict) -> str:
     return {
-        "application": "Проверка приложения",
-        "batch": "Пояснение модели к пакету",
-    }.get(str(data.get("reason_source", "")), "Решение модели")
+        "application": "Application check",
+        "batch": "Model explanation for batch",
+    }.get(str(data.get("reason_source", "")), "Model decision")
 
 
 def status_text(
-    bird: Mockingbird,
+    mockingbird: Mockingbird,
     now: datetime,
     *,
     inflight: bool,
@@ -22,27 +22,27 @@ def status_text(
     failures: int,
     max_failures: int,
 ) -> str:
-    scheduler = bird.scheduler
+    scheduler = mockingbird.scheduler
     return "\n".join(
         [
-            f"Время: {now.isoformat()} | режим ответов: {scheduler.config['reply_mode']}",
-            f"Запрос к модели: {'выполняется' if inflight else 'нет'} | генерации: {generations}/{max_generations if max_generations is not None else 'без лимита'}",
-            f"Пауза: {'да' if paused else 'нет'} | ошибок подряд: {failures}/{max_failures}",
-            f"Ожидаемый ответ: {scheduler.reply_due.isoformat() if scheduler.reply_due else 'нет'}",
-            f"Инициатив отправлено: {scheduler.initiations_sent}/{scheduler.config['max_initiations_per_day']} | ожидаем ответ собеседника: {'да' if scheduler.awaiting_reply else 'нет'}",
-            "Оставшиеся слоты: "
-            + (", ".join(slot.isoformat() for slot in scheduler.planned) or "нет"),
-            "Симуляция дня: "
+            f"Time: {now.isoformat()} | reply mode: {scheduler.config['reply_mode']}",
+            f"Model request: {'in progress' if inflight else 'none'} | generations: {generations}/{max_generations if max_generations is not None else 'unlimited'}",
+            f"Paused: {'yes' if paused else 'no'} | consecutive failures: {failures}/{max_failures}",
+            f"Reply due: {scheduler.reply_due.isoformat() if scheduler.reply_due else 'none'}",
+            f"Initiations sent: {scheduler.initiations_sent}/{scheduler.config['max_initiations_per_day']} | awaiting partner reply: {'yes' if scheduler.awaiting_reply else 'no'}",
+            "Remaining slots: "
+            + (", ".join(slot.isoformat() for slot in scheduler.planned) or "none"),
+            "Day simulation: "
             + (
-                f"план {'сохранён' if bird.life.local(now).date().isoformat() in bird.life.days else 'пока отсутствует'}; дневник ежедневно в {bird.life.diary_hour}:00 и при выходе"
-                if bird.life
-                else "отключена"
+                f"plan {'saved' if mockingbird.life.local(now).date().isoformat() in mockingbird.life.days else 'not yet available'}; diary daily at {mockingbird.life.diary_hour}:00 and on exit"
+                if mockingbird.life
+                else "disabled"
             ),
-            "Память: "
+            "Memory: "
             + (
-                f"{len(bird.memory.entries)} актуальных записей слоя памяти; {len(bird.memory.pending)}/{bird.memory.update_every} входящих в очереди"
-                if bird.memory
-                else "только исходный дневник"
+                f"{len(mockingbird.memory.entries)} current memory entries; {len(mockingbird.memory.pending)}/{mockingbird.memory.update_every} incoming messages queued"
+                if mockingbird.memory
+                else "source diary only"
             ),
         ]
     )
@@ -50,7 +50,7 @@ def status_text(
 
 def wait_message(decision: Decision, paused: bool) -> str:
     if paused:
-        return "Запросы на паузе. Входящие сохраняются; /status — состояние."
+        return "Requests are paused. Incoming messages are saved; /status shows the current state."
     if decision.due_at:
-        return f"Следующее событие: {decision.due_at.isoformat()}. Можно писать; /status — состояние."
-    return "Ожидаем твоё сообщение или план нового дня. Сегодня самостоятельных сообщений больше нет."
+        return f"Next event: {decision.due_at.isoformat()}. You can send a message; /status shows the current state."
+    return "Waiting for your message or a new day plan. No more proactive messages are scheduled for today."

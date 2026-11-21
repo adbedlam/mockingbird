@@ -10,7 +10,7 @@ import httpx
 import pytest
 from test_pipeline import Clock, Model, bird_for, pump
 
-from mockingbird.chat.pipeline import ChatPipeline
+from mockingbird.chat.chat import Chat
 from mockingbird.interfaces.telegram.business import (
     BotAPIError,
     BotNetworkError,
@@ -121,7 +121,7 @@ def business(tmp_path, monkeypatch):
 
 def attach(transport, clock):
     events = []
-    pipeline = ChatPipeline(
+    pipeline = Chat(
         bird_for(Model()),
         transport.journal.directory,
         events.append,
@@ -210,11 +210,11 @@ def test_deleted_messages_pause_and_duplicate_update_is_applied_once(business):
     transport, clock, api, loop = business
     pipeline, events = attach(transport, clock)
     incoming(business)
-    revision = pipeline.bird.scheduler.revision
+    revision = pipeline.mockingbird.scheduler.revision
     transport.journal.queue_updates(api.updates)
     loop.run_until_complete(transport.process_updates())
-    assert len(pipeline.bird.live.messages) == 1
-    assert pipeline.bird.scheduler.revision == revision
+    assert len(pipeline.mockingbird.live.messages) == 1
+    assert pipeline.mockingbird.scheduler.revision == revision
     api.updates.append(
         {
             "update_id": 2,
@@ -237,7 +237,7 @@ def test_observe_keeps_incoming_for_later_persona(business):
     pipeline, events = attach(transport, clock)
     loop.run_until_complete(transport.restore_messages())
     loop.run_until_complete(transport.restore_messages())
-    assert len(pipeline.bird.live.messages) == 1
+    assert len(pipeline.mockingbird.live.messages) == 1
     assert not transport.journal.get("pending_messages")
     assert transport.journal.get("verified_recipient")["update_id"] == 1
 
@@ -248,16 +248,18 @@ def test_pipeline_ack_precedes_history_commit(business):
     incoming(business)
 
     def uncommitted():
-        assert len(pipeline.bird.live.messages) == 1
-        assert pipeline.bird.scheduler.reply_due is not None
+        assert len(pipeline.mockingbird.live.messages) == 1
+        assert pipeline.mockingbird.scheduler.reply_due is not None
 
     api.before_send = uncommitted
     clock.now += timedelta(seconds=5)
     pipeline.step()
     pump(pipeline, lambda: any(e.stage == "OUTPUT" for e in events))
-    assert pipeline.bird.live.messages[-1].message_id == 200
-    assert pipeline.bird.scheduler.reply_due is None
-    assert transport.journal.get("state") == pipeline.bird.runtime_store.snapshot()
+    assert pipeline.mockingbird.live.messages[-1].message_id == 200
+    assert pipeline.mockingbird.scheduler.reply_due is None
+    assert (
+        transport.journal.get("state") == pipeline.mockingbird.runtime_store.snapshot()
+    )
 
 
 def test_timeout_stops_retries_and_persists_unknown(business):
@@ -269,7 +271,7 @@ def test_timeout_stops_retries_and_persists_unknown(business):
     pipeline.step()
     pump(pipeline, lambda: pipeline.delivery_blocked)
     assert transport.journal.unresolved()[0]["status"] == "unknown"
-    assert len(pipeline.bird.live.messages) == 1
+    assert len(pipeline.mockingbird.live.messages) == 1
     for _ in range(5):
         pipeline.step()
     assert len([call for call in api.calls if call[0] == "sendMessage"]) == 1
@@ -290,9 +292,9 @@ def test_confirmed_send_recovers_without_new_send(business, monkeypatch):
     transport, clock, api, loop = business
     pipeline, events = attach(transport, clock)
     incoming(business)
-    apply = pipeline.bird.delivery_coordinator.apply_delivery
+    apply = pipeline.mockingbird.delivery_coordinator.apply_delivery
     monkeypatch.setattr(
-        pipeline.bird.delivery_coordinator,
+        pipeline.mockingbird.delivery_coordinator,
         "apply_delivery",
         lambda *args: (_ for _ in ()).throw(OSError("disk")),
     )
@@ -300,11 +302,13 @@ def test_confirmed_send_recovers_without_new_send(business, monkeypatch):
     pipeline.step()
     pump(pipeline, lambda: pipeline.delivery_blocked)
     assert transport.journal.unresolved()[0]["status"] == "sent"
-    monkeypatch.setattr(pipeline.bird.delivery_coordinator, "apply_delivery", apply)
+    monkeypatch.setattr(
+        pipeline.mockingbird.delivery_coordinator, "apply_delivery", apply
+    )
     transport.recover()
     transport.recover()
     assert not transport.journal.unresolved()
-    assert len(pipeline.bird.live.messages) == 2
+    assert len(pipeline.mockingbird.live.messages) == 2
     assert len([call for call in api.calls if call[0] == "sendMessage"]) == 1
 
 
@@ -344,9 +348,12 @@ def test_approved_test_is_restored_into_conversation_without_resending(business)
     pipeline, events = attach(transport, clock)
     loop.run_until_complete(transport.restore_messages())
     loop.run_until_complete(transport.restore_messages())
-    assert [m.author for m in pipeline.bird.live.messages] == ["Partner", "Persona"]
-    assert pipeline.bird.live.messages[-1].text == approval["text"]
-    assert pipeline.bird.scheduler.reply_due is None
+    assert [m.author for m in pipeline.mockingbird.live.messages] == [
+        "Partner",
+        "Persona",
+    ]
+    assert pipeline.mockingbird.live.messages[-1].text == approval["text"]
+    assert pipeline.mockingbird.scheduler.reply_due is None
     assert len([call for call in api.calls if call[0] == "sendMessage"]) == 1
 
 
@@ -399,13 +406,13 @@ def test_new_incoming_reopens_only_automatic_window_pause(business):
 
 
 def test_atomic_snapshot_restores_despite_incomplete_legacy_exports(tmp_path):
-    bird = bird_for(Model())
-    bird.receive("вопрос", Clock()())
-    bird.runtime_store.save(tmp_path)
+    mockingbird = bird_for(Model())
+    mockingbird.receive("вопрос", Clock()())
+    mockingbird.runtime_store.save(tmp_path)
     (tmp_path / "scheduler.json").unlink()
     restored = bird_for(Model())
     restored.runtime_store.restore(tmp_path)
-    assert restored.runtime_store.snapshot() == bird.runtime_store.snapshot()
+    assert restored.runtime_store.snapshot() == mockingbird.runtime_store.snapshot()
 
 
 def test_export_keeps_diagnostics_without_credentials(business, monkeypatch):

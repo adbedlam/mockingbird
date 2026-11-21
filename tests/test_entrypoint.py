@@ -3,10 +3,10 @@ from pathlib import Path
 import pytest
 
 from mockingbird import entrypoint
-from mockingbird.interfaces.terminal import interface
-from mockingbird.interfaces.telegram.options import TelegramOptions
-from mockingbird.interfaces.terminal.options import TerminalOptions
 from mockingbird.interfaces.telegram import business, interface
+from mockingbird.interfaces.telegram.options import TelegramOptions
+from mockingbird.interfaces.terminal import interface
+from mockingbird.interfaces.terminal.options import TerminalOptions
 
 
 def parse_options(*argv: str) -> TerminalOptions | TelegramOptions:
@@ -66,7 +66,12 @@ def test_interface_rejects_missing_or_inapplicable_flags(argv: tuple[str, ...]):
     ("interface", "command", "module", "class_name"),
     [
         ("cli", [], "mockingbird.interfaces.terminal.interface", "TerminalInterface"),
-        ("telegram", ["run"], "mockingbird.interfaces.telegram.interface", "TelegramInterface"),
+        (
+            "telegram",
+            ["run"],
+            "mockingbird.interfaces.telegram.interface",
+            "TelegramInterface",
+        ),
     ],
 )
 def test_main_dispatches_to_selected_interface(

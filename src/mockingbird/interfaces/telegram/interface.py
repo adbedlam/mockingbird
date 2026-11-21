@@ -270,19 +270,19 @@ def _run(options: TelegramOptions, config: dict) -> None:
                     raise SetupError("Тест не отправлен; смотри причину выше.")
                 return
             stack.enter_context(SessionLock(memory))
-            bird = create_bird(
+            mockingbird = create_bird(
                 config,
                 fast_replies=(
                     options.fast_replies if options.command == "run" else False
                 ),
             )
             if journal.get("state"):
-                bird.runtime_store.load_snapshot(journal.get("state"))
+                mockingbird.runtime_store.load_snapshot(journal.get("state"))
             else:
-                bird.runtime_store.restore(directory)
+                mockingbird.runtime_store.restore(directory)
             pipeline = create_pipeline(
                 config,
-                bird,
+                mockingbird,
                 directory,
                 render,
                 delivery=transport.deliver,

@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from datetime import datetime
 from pathlib import Path
 
-from mockingbird.chat.pipeline import ChatPipeline
+from mockingbird.chat.chat import Chat
 from mockingbird.chat.session import create_bird, create_pipeline
 from mockingbird.conversation.identity import pair_id
 from mockingbird.interfaces.common import SessionLock, render
@@ -16,7 +16,7 @@ from mockingbird.llm.client import LLM
 from mockingbird.persona.refresh import refresh_needed, refresh_persona
 
 
-def run_console(pipeline: ChatPipeline) -> None:
+def run_console(pipeline: Chat) -> None:
     inbox: queue.Queue[tuple[datetime, str | None]] = queue.Queue()
 
     def read_input() -> None:
@@ -119,19 +119,19 @@ class TerminalInterface:
                         ),
                     )
                 startup_generations = 3
-            bird = create_bird(config, seed=options.seed)
-            bird.runtime_store.restore(directory)
-            if bird.memory is not None:
-                imported = bird.memory.import_sessions(runtime)
-                bird.memory.render()
-                bird.diary = bird.memory.combined()
+            mockingbird = create_bird(config, seed=options.seed)
+            mockingbird.runtime_store.restore(directory)
+            if mockingbird.memory is not None:
+                imported = mockingbird.memory.import_sessions(runtime)
+                mockingbird.memory.render()
+                mockingbird.diary = mockingbird.memory.combined()
                 print(
-                    f"MEMORY_RESTORE | В очереди {len(bird.memory.pending)} входящих, новых из других сессий: {imported}. Ответы модели не используются как факты.",
+                    f"MEMORY_RESTORE | В очереди {len(mockingbird.memory.pending)} входящих, новых из других сессий: {imported}. Ответы модели не используются как факты.",
                     flush=True,
                 )
             pipeline = create_pipeline(
                 config,
-                bird,
+                mockingbird,
                 directory,
                 render,
                 max_generations=options.max_generations,

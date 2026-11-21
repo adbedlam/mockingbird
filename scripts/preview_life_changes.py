@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from mockingbird.chat.pipeline import ChatPipeline
+from mockingbird.chat.chat import Chat
 from mockingbird.config import CONFIG_PATH, load_config
 from mockingbird.interfaces.terminal.interface import render
 from mockingbird.mockingbird.mockingbird import Mockingbird
@@ -56,7 +56,7 @@ def main() -> None:
         def complete(self, messages):
             raise RuntimeError("Offline preparation cannot call a model")
 
-    bird = Mockingbird.from_config(
+    mockingbird = Mockingbird.from_config(
         config, model=None if args.generate else Offline(), memory_enabled=False
     )
     life_dir = output / "life"
@@ -64,21 +64,23 @@ def main() -> None:
     (life_dir / "life.json").write_bytes(args.plan.read_bytes())
     life = PersonaLife(
         life_dir,
-        bird.history.user,
-        bird.history.other,
+        mockingbird.history.user,
+        mockingbird.history.other,
         zone.key,
-        life_prompt=bird.life_prompt.content,
+        life_prompt=mockingbird.life_prompt.content,
     )
     if now.date().isoformat() not in life.days:
         parser.error(
             "The copied plan has no day for --at; use its date or another plan"
         )
-    bird.life = life
+    mockingbird.life = life
     if args.prepare:
-        bird.receive(args.message, now)
-        due = bird.scheduler.reply_due
+        mockingbird.receive(args.message, now)
+        due = mockingbird.scheduler.reply_due
         assert due is not None
-        messages = bird.context_builder.build(bird.scheduler.tick(due), due)
+        messages = mockingbird.context_builder.build(
+            mockingbird.scheduler.tick(due), due
+        )
         settings = config["inference_model"]
         request = {
             "method": "POST",
@@ -104,8 +106,8 @@ def main() -> None:
         render(event)
 
     settings = config["inference_model"]
-    pipeline = ChatPipeline(
-        bird,
+    pipeline = Chat(
+        mockingbird,
         output / "runtime",
         on_event,
         clock=lambda: now,
@@ -122,7 +124,7 @@ def main() -> None:
             outputs = sum(e.stage == "OUTPUT" for e in events)
             before = len(events)
             pipeline.receive(text)
-            due = bird.scheduler.reply_due
+            due = mockingbird.scheduler.reply_due
             assert due is not None
             now = due
             deadline = time.monotonic() + settings.get("timeout_seconds", 60) + 15

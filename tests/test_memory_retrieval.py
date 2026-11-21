@@ -8,7 +8,7 @@ import pytest
 from test_memory_versions import apply, memory_at, operation
 from test_pipeline import Model, bird_for, pump
 
-from mockingbird.chat.pipeline import ChatPipeline
+from mockingbird.chat.chat import Chat
 from mockingbird.conversation.message import Message
 from mockingbird.persona.diary.diary import Diary
 from mockingbird.persona.diary.entry import Entry
@@ -209,13 +209,13 @@ def test_diary_update_can_find_and_close_an_old_relevant_memory(tmp_path):
 
 
 def test_reply_and_request_audit_include_retrieval_but_not_fake_world_facts(tmp_path):
-    bird = bird_for(Model())
-    bird.diary = Diary(corpus())
-    bird.diary_last_n = 4
+    mockingbird = bird_for(Model())
+    mockingbird.diary = Diary(corpus())
+    mockingbird.diary_last_n = 4
     events = []
     clock = [NOW]
-    pipeline = ChatPipeline(
-        bird, tmp_path, events.append, clock=lambda: clock[0], max_generations=1
+    pipeline = Chat(
+        mockingbird, tmp_path, events.append, clock=lambda: clock[0], max_generations=1
     )
     pipeline.start()
     pipeline.receive("что с интеграцией телеграма")
@@ -240,15 +240,15 @@ def test_reply_and_request_audit_include_retrieval_but_not_fake_world_facts(tmp_
 
 def test_memory_command_is_local_and_does_not_enter_conversation(tmp_path):
     model = Model()
-    bird = bird_for(model)
-    bird.diary = Diary(corpus())
+    mockingbird = bird_for(model)
+    mockingbird.diary = Diary(corpus())
     events = []
-    pipeline = ChatPipeline(bird, tmp_path, events.append, clock=lambda: NOW)
+    pipeline = Chat(mockingbird, tmp_path, events.append, clock=lambda: NOW)
     pipeline.paused = True
     pipeline.start()
     pipeline.command("/memory телеграм")
     assert not model.calls
-    assert not bird.live.messages
+    assert not mockingbird.live.messages
     event = next(e for e in events if e.stage == "MEMORY_SEARCH")
     assert "закончил интеграцию" in event.data["text"]
     assert event.data["selection"]["selected"][0]["historical"]

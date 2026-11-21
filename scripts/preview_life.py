@@ -52,21 +52,23 @@ def main() -> None:
         def complete(self, messages):
             raise RuntimeError("Offline preview cannot call a model")
 
-    bird = Mockingbird.from_config(
+    mockingbird = Mockingbird.from_config(
         config, model=None if args.generate else Offline(), memory_enabled=False
     )
-    config_reply = dict(bird.scheduler.config)
+    config_reply = dict(mockingbird.scheduler.config)
     config_reply["reply_mode"] = "immediate"
-    bird.scheduler = Scheduler(BehaviorProfile(bird.history, config_reply), 7)
+    mockingbird.scheduler = Scheduler(
+        BehaviorProfile(mockingbird.history, config_reply), 7
+    )
     life = PersonaLife(
         output / "life",
-        bird.history.user,
-        bird.history.other,
+        mockingbird.history.user,
+        mockingbird.history.other,
         zone.key,
-        life_prompt=bird.life_prompt.content,
+        life_prompt=mockingbird.life_prompt.content,
     )
-    bird.life = life
-    messages = life.prepare(now, bird.inner_prompt.content)
+    mockingbird.life = life
+    messages = life.prepare(now, mockingbird.inner_prompt.content)
     output.mkdir(parents=True, exist_ok=True)
     request_path = output / "life.request.json"
     request_path.write_text(
@@ -90,7 +92,7 @@ def main() -> None:
         print(f"Prepared locally; 0 API calls. Request: {request_path}")
         return
     raw = (
-        bird.model.complete(messages)
+        mockingbird.model.complete(messages)
         if args.generate
         else args.replay.read_text(encoding="utf-8")
     )
@@ -107,11 +109,11 @@ def main() -> None:
         "\n## План на момент запуска\n\n" + life.view(now),
     ]
     if args.generate:
-        bird.receive(args.message, now)
-        due = bird.scheduler.reply_due
+        mockingbird.receive(args.message, now)
+        due = mockingbird.scheduler.reply_due
         assert due is not None
-        decision = bird.scheduler.tick(due)
-        reply_messages = bird.context_builder.build(decision, due)
+        decision = mockingbird.scheduler.tick(due)
+        reply_messages = mockingbird.context_builder.build(decision, due)
         reply_path = output / "reply.request.json"
         reply_path.write_text(
             json.dumps(
@@ -121,7 +123,7 @@ def main() -> None:
             ),
             encoding="utf-8",
         )
-        raw_reply = bird.model.complete(reply_messages)
+        raw_reply = mockingbird.model.complete(reply_messages)
         (output / "reply.response.txt").write_text(raw_reply, encoding="utf-8")
         draft = parse_draft(raw_reply, decision.kind)
         report.append(

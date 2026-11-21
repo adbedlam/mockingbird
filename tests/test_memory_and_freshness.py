@@ -7,8 +7,8 @@ from zoneinfo import ZoneInfo
 import pytest
 from config_helpers import scheduler_settings
 
-from mockingbird.chat.events import PipelineEvent
-from mockingbird.chat.pipeline import ChatPipeline
+from mockingbird.chat.chat import Chat
+from mockingbird.chat.event_recorder.event_recorder import PipelineEvent
 from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message
 from mockingbird.mockingbird.mockingbird import Mockingbird
@@ -357,16 +357,16 @@ def test_current_context_excludes_old_memories_but_keeps_new_cross_session_evide
     config: dict,
 ):
     model = RuntimeModel()
-    bird = Mockingbird.from_config(config, model=model)
-    assert bird.memory is not None
-    bird.memory.ingest([incoming("NEW_PREFERENCE_2026")])
-    decision = bird.scheduler.tick(NOW)
-    payload = json.dumps(bird.context_builder.build(decision, NOW))
+    mockingbird = Mockingbird.from_config(config, model=model)
+    assert mockingbird.memory is not None
+    mockingbird.memory.ingest([incoming("NEW_PREFERENCE_2026")])
+    decision = mockingbird.scheduler.tick(NOW)
+    payload = json.dumps(mockingbird.context_builder.build(decision, NOW))
     assert "OLD_MEMORY_2024" not in payload
     assert "OLD_MESSAGE_2024" not in payload
     assert "NEW_PREFERENCE_2026" in payload
     assert "CURRENT_STYLE_2026" in payload
-    assert "OLD_MEMORY_2024" in str(bird.memory.base)
+    assert "OLD_MEMORY_2024" in str(mockingbird.memory.base)
 
 
 @pytest.mark.parametrize("manual", [False, True])
@@ -374,11 +374,11 @@ def test_pipeline_updates_diary_after_reply_with_visible_sources(
     config: dict, tmp_path: Path, manual: bool
 ):
     config["diary"] = {"update_in": 200 if manual else 1}
-    bird = Mockingbird.from_config(config, model=RuntimeModel())
+    mockingbird = Mockingbird.from_config(config, model=RuntimeModel())
     now = [NOW]
     events: list[PipelineEvent] = []
-    pipeline = ChatPipeline(
-        bird,
+    pipeline = Chat(
+        mockingbird,
         tmp_path / "session",
         events.append,
         clock=lambda: now[0],
@@ -400,13 +400,13 @@ def test_pipeline_updates_diary_after_reply_with_visible_sources(
     assert any(e.stage == "OUTPUT" for e in events)
     assert any(e.stage == "DIARY_ADDED" for e in events)
     assert pipeline.generations == 2
-    assert bird.memory is not None and len(bird.memory.entries) == 1
-    assert not bird.memory.pending
-    assert "GENERATED_REPLY_NOT_A_FACT" not in json.dumps(bird.memory.sources)
+    assert mockingbird.memory is not None and len(mockingbird.memory.entries) == 1
+    assert not mockingbird.memory.pending
+    assert "GENERATED_REPLY_NOT_A_FACT" not in json.dumps(mockingbird.memory.sources)
     assert "Partner told me their preference" in json.dumps(
-        bird.context_builder.build(bird.scheduler.tick(now[0]), now[0])
+        mockingbird.context_builder.build(mockingbird.scheduler.tick(now[0]), now[0])
     )
-    assert (bird.memory.directory / "diary.md").exists()
+    assert (mockingbird.memory.directory / "diary.md").exists()
 
 
 def test_history_zero_limit_does_not_expand_to_whole_archive(config: dict):

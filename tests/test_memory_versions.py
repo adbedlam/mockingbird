@@ -8,7 +8,7 @@ import pytest
 from test_memory_and_freshness import NOW, incoming
 from test_pipeline import Model, bird_for
 
-from mockingbird.chat.pipeline import ChatPipeline
+from mockingbird.chat.chat import Chat
 from mockingbird.persona.diary.diary import Diary
 from mockingbird.persona.diary.entry import Entry
 from mockingbird.persona.diary.runtime import DiaryMemory
@@ -483,10 +483,11 @@ def test_reply_context_contains_latest_state_not_superseded_pending_memory(tmp_p
         ],
         NOW + timedelta(seconds=10),
     )
-    bird = bird_for(Model())
-    bird.memory, bird.diary = memory, memory.combined()
-    context = bird.context_builder.build(
-        bird.scheduler.tick(NOW + timedelta(seconds=20)), NOW + timedelta(seconds=20)
+    mockingbird = bird_for(Model())
+    mockingbird.memory, mockingbird.diary = memory, memory.combined()
+    context = mockingbird.context_builder.build(
+        mockingbird.scheduler.tick(NOW + timedelta(seconds=20)),
+        NOW + timedelta(seconds=20),
     )
     diary_message = next(
         m["content"] for m in context if m["content"].startswith("Dated diary")
@@ -535,13 +536,13 @@ def test_pipeline_displays_add_confirm_and_update_with_current_revision(tmp_path
             return json.dumps({"operations": [item], "reason": "batch processed"})
 
     model = MemoryModel()
-    bird = bird_for(model)
-    bird.memory = memory_at(tmp_path / "memory", update_every=1)
-    bird.diary = bird.memory.combined()
+    mockingbird = bird_for(model)
+    mockingbird.memory = memory_at(tmp_path / "memory", update_every=1)
+    mockingbird.diary = mockingbird.memory.combined()
     clock = [NOW]
     events = []
-    pipeline = ChatPipeline(
-        bird,
+    pipeline = Chat(
+        mockingbird,
         tmp_path / "runtime",
         events.append,
         clock=lambda: clock[0],
@@ -567,6 +568,6 @@ def test_pipeline_displays_add_confirm_and_update_with_current_revision(tmp_path
         for e in events
         if e.stage in ("DIARY_ADDED", "DIARY_CONFIRMED", "DIARY_UPDATED")
     ] == ["DIARY_ADDED", "DIARY_CONFIRMED", "DIARY_UPDATED"]
-    assert bird.memory.entries[0].state == "completed"
-    assert bird.memory.entries[0].revision == 2
+    assert mockingbird.memory.entries[0].state == "completed"
+    assert mockingbird.memory.entries[0].revision == 2
     assert pipeline.generations == 6

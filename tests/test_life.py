@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from test_pipeline import Clock, Model, bird_for, pump
 
-from mockingbird.chat.pipeline import ChatPipeline
+from mockingbird.chat.chat import Chat
 from mockingbird.conversation.history import History
 from mockingbird.conversation.message import Message as ConversationMessage
 from mockingbird.persona.life import LifePrompt, PersonaLife
@@ -142,16 +142,16 @@ def test_state_is_bound_to_persona_and_timezone(tmp_path):
 def test_life_api_error_backoff_and_request_limit(tmp_path):
     model = Model(["{broken"])
     clock = Clock()
-    bird = bird_for(model)
-    bird.life = life_for(tmp_path)
+    mockingbird = bird_for(model)
+    mockingbird.life = life_for(tmp_path)
     events = []
-    pipeline = ChatPipeline(
-        bird, tmp_path / "runtime", events.append, clock=clock, max_generations=1
+    pipeline = Chat(
+        mockingbird, tmp_path / "runtime", events.append, clock=clock, max_generations=1
     )
     pipeline.start()
     pump(pipeline, lambda: any(e.stage == "LIFE_ERROR" for e in events))
-    assert bird.life.days == {}
-    assert not bird.life.needed(clock.now)
+    assert mockingbird.life.days == {}
+    assert not mockingbird.life.needed(clock.now)
     clock.now += timedelta(minutes=5)
     pipeline.step()
     assert pipeline.paused
@@ -168,10 +168,10 @@ def test_pipeline_plans_before_reply_input_does_not_invalidate_plan_and_logs_dia
     model = Model([plan(), reply], block=True)
     clock = Clock()
     clock.now = clock.now.replace(hour=13)
-    bird = bird_for(model)
-    bird.life = life_for(tmp_path)
+    mockingbird = bird_for(model)
+    mockingbird.life = life_for(tmp_path)
     events = []
-    pipeline = ChatPipeline(bird, tmp_path / "runtime", events.append, clock=clock)
+    pipeline = Chat(mockingbird, tmp_path / "runtime", events.append, clock=clock)
     pipeline.start()
     assert model.started.wait(1)
     pipeline.receive("что делал весь день")
@@ -197,8 +197,8 @@ def test_pipeline_plans_before_reply_input_does_not_invalidate_plan_and_logs_dia
     assert any(e.stage == "LIFE_STATE" for e in events)
     assert any(e.stage == "DAILY_DIARY" for e in events)
     pipeline.close()
-    assert (bird.life.directory / "daily_diary.md").exists()
-    assert not (bird.life.directory.parent / "memory.json").exists()
+    assert (mockingbird.life.directory / "daily_diary.md").exists()
+    assert not (mockingbird.life.directory.parent / "memory.json").exists()
     paths = sorted((pipeline.directory / "requests").glob("*.json"))
     requests = [json.loads(p.read_text(encoding="utf-8")) for p in paths]
     assert {r["status"] for r in requests} == {"life_planned", "sent"}
@@ -207,17 +207,21 @@ def test_pipeline_plans_before_reply_input_does_not_invalidate_plan_and_logs_dia
 def test_day_rollover_during_plan_discards_old_result(tmp_path):
     model = Model([plan()], block=True)
     clock = Clock()
-    bird = bird_for(model)
-    bird.life = life_for(tmp_path)
-    pipeline = ChatPipeline(
-        bird, tmp_path / "runtime", lambda e: None, clock=clock, max_generations=1
+    mockingbird = bird_for(model)
+    mockingbird.life = life_for(tmp_path)
+    pipeline = Chat(
+        mockingbird,
+        tmp_path / "runtime",
+        lambda e: None,
+        clock=clock,
+        max_generations=1,
     )
     pipeline.start()
     assert model.started.wait(1)
     clock.now += timedelta(days=1)
     model.release.set()
     pump(pipeline, lambda: pipeline.inflight is None)
-    assert not bird.life.days
+    assert not mockingbird.life.days
     assert pipeline.paused
     pipeline.close()
 
@@ -239,17 +243,21 @@ def test_plan_atomic_failure_does_not_accept_state(tmp_path, monkeypatch):
 
 def test_pause_discards_plan_and_no_generation_after_limit(tmp_path):
     model = Model([plan()], block=True)
-    bird = bird_for(model)
-    bird.life = life_for(tmp_path)
-    pipeline = ChatPipeline(
-        bird, tmp_path / "runtime", lambda e: None, clock=Clock(), max_generations=1
+    mockingbird = bird_for(model)
+    mockingbird.life = life_for(tmp_path)
+    pipeline = Chat(
+        mockingbird,
+        tmp_path / "runtime",
+        lambda e: None,
+        clock=Clock(),
+        max_generations=1,
     )
     pipeline.start()
     assert model.started.wait(1)
     pipeline.command("/pause")
     model.release.set()
     pump(pipeline, lambda: pipeline.inflight is None)
-    assert not bird.life.days
+    assert not mockingbird.life.days
     pipeline.command("/resume")
     assert pipeline.paused
     assert len(model.calls) == 1
